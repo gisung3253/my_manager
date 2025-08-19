@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import Button from '../ui/Button'
 
 export default function Hero() {
@@ -14,9 +15,11 @@ export default function Hero() {
       </p>
 
       <div className="flex items-center justify-center space-x-4">
-        <Button variant="primary" size="lg">
-          무료로 시작하기
-        </Button>
+        <Link href="/dashboard">
+          <Button variant="primary" size="lg">
+            무료로 시작하기
+          </Button>
+        </Link>
         <Button variant="secondary" size="lg">
           데모 보기
         </Button>
