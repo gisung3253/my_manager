@@ -1,6 +1,26 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 export default function Hero() {
+  const router = useRouter()
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    const user = localStorage.getItem('user')
+    setIsLoggedIn(!!user)
+  }, [])
+
+  const handleStartClick = () => {
+    if (isLoggedIn) {
+      router.push('/dashboard')
+    } else {
+      router.push('/login')
+    }
+  }
+
   return (
     <section className="px-6 py-32 max-w-7xl mx-auto">
       <div className="max-w-4xl">
@@ -18,9 +38,12 @@ export default function Hero() {
           소셜미디어의 모든 과정에 함께합니다.
         </div>
 
-        <Link href="/dashboard" className="inline-block bg-black text-white px-8 py-4 text-lg hover:bg-gray-800 transition-colors">
+        <button 
+          onClick={handleStartClick}
+          className="inline-block bg-black text-white px-8 py-4 text-lg hover:bg-gray-800 transition-colors"
+        >
           무료로 시작하기 →
-        </Link>
+        </button>
       </div>
     </section>
   )

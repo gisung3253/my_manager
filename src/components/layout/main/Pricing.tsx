@@ -1,6 +1,25 @@
-import Link from 'next/link'
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 export default function Pricing() {
+  const router = useRouter()
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    const user = localStorage.getItem('user')
+    setIsLoggedIn(!!user)
+  }, [])
+
+  const handleTrialClick = () => {
+    if (isLoggedIn) {
+      router.push('/dashboard')
+    } else {
+      router.push('/login')
+    }
+  }
+
   return (
     <section id="pricing" className="px-6 py-32 bg-black text-white">
       <div className="max-w-4xl mx-auto text-center">
@@ -37,9 +56,12 @@ export default function Pricing() {
             </li>
           </ul>
           
-          <Link href="/dashboard" className="block w-full bg-black text-white py-3 text-center hover:bg-gray-800 transition-colors">
+          <button 
+            onClick={handleTrialClick}
+            className="block w-full bg-black text-white py-3 text-center hover:bg-gray-800 transition-colors"
+          >
             7일 무료 체험 시작
-          </Link>
+          </button>
         </div>
       </div>
     </section>
