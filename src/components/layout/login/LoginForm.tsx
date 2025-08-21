@@ -52,7 +52,7 @@ export default function LoginForm({ isLogin, onToggle }: LoginFormProps) {
   }
 
   const handleGoogleLogin = () => {
-    router.push('/onboarding/user-type')
+    window.location.href = '/api/auth/google'
   }
 
   return (
