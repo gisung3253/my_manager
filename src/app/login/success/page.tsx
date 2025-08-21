@@ -1,14 +1,15 @@
 'use client'
 
-import { useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
-function LoginSuccessContent() {
+export default function LoginSuccessPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
 
   useEffect(() => {
-    const userParam = searchParams.get('user')
+    // URL에서 직접 파라미터 추출
+    const urlParams = new URLSearchParams(window.location.search)
+    const userParam = urlParams.get('user')
     
     if (userParam) {
       try {
@@ -22,7 +23,7 @@ function LoginSuccessContent() {
     } else {
       router.push('/login?error=no_user_data')
     }
-  }, [router, searchParams])
+  }, [router])
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center">
@@ -31,20 +32,5 @@ function LoginSuccessContent() {
         <p className="text-gray-600">잠시만 기다려주세요</p>
       </div>
     </div>
-  )
-}
-
-export default function LoginSuccessPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-black mb-4">로딩 중...</h1>
-          <p className="text-gray-600">잠시만 기다려주세요</p>
-        </div>
-      </div>
-    }>
-      <LoginSuccessContent />
-    </Suspense>
   )
 }
