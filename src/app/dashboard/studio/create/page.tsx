@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 interface ConnectedAccount {
@@ -10,7 +10,7 @@ interface ConnectedAccount {
   profile_image_url?: string
 }
 
-export default function CreatePostPage() {
+function CreatePostContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const postType = searchParams.get('type') as 'text' | 'image' | 'video'
@@ -494,5 +494,33 @@ export default function CreatePostPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function CreatePostPage() {
+  return (
+    <Suspense fallback={
+      <div className="h-full p-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2 mb-8"></div>
+            <div className="grid lg:grid-cols-3 gap-8">
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-16 bg-gray-200 rounded"></div>
+                ))}
+              </div>
+              <div className="lg:col-span-2 space-y-6">
+                <div className="h-64 bg-gray-200 rounded"></div>
+                <div className="h-32 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    }>
+      <CreatePostContent />
+    </Suspense>
   )
 }
