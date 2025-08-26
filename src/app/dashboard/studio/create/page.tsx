@@ -27,6 +27,11 @@ function CreatePostContent() {
   const [youtubePrivacy, setYoutubePrivacy] = useState<'public' | 'unlisted' | 'private'>('public')
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  
+  // Schedule settings
+  const [isScheduled, setIsScheduled] = useState(false)
+  const [scheduledDate, setScheduledDate] = useState('')
+  const [scheduledTime, setScheduledTime] = useState('')
 
   useEffect(() => {
     fetchConnectedAccounts()
@@ -105,6 +110,20 @@ function CreatePostContent() {
       return
     }
 
+    // 예약 설정 검증
+    if (isScheduled && (!scheduledDate || !scheduledTime)) {
+      alert('예약 날짜와 시간을 설정해주세요.')
+      return
+    }
+
+    if (isScheduled) {
+      const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}`)
+      if (scheduledDateTime <= new Date()) {
+        alert('예약 시간은 현재 시간보다 이후여야 합니다.')
+        return
+      }
+    }
+
     setUploading(true)
     setUploadProgress(0)
 
@@ -116,6 +135,56 @@ function CreatePostContent() {
       }
       const user = JSON.parse(userStr)
 
+      // 플랫폼 설정 준비
+      const platformSettings: any = {}
+      if (hasYouTubeAccount) {
+        platformSettings.youtube = {
+          title: youtubeTitle,
+          description: youtubeDescription,
+          privacy: youtubePrivacy
+        }
+      }
+
+      // 예약 게시물인 경우 DB에 저장하고 종료
+      if (isScheduled) {
+        const formData = new FormData()
+        formData.append('userId', user.id.toString())
+        formData.append('title', youtubeTitle || '제목 없음')
+        formData.append('content', mainCaption)
+        formData.append('postType', postType || 'video')
+        formData.append('selectedAccounts', JSON.stringify(selectedAccounts))
+        formData.append('isScheduled', 'true')
+        // 한국 시간으로 입력된 시간을 UTC로 변환하지 않고 그대로 전송
+        // ISO 형식으로 전송하되, 시간대 정보를 포함
+        const scheduledDateTime = `${scheduledDate}T${scheduledTime}:00+09:00` // 한국 시간대 명시
+        formData.append('scheduledAt', scheduledDateTime)
+        formData.append('platformSettings', JSON.stringify(platformSettings))
+        formData.append('video', videoFile)
+
+        const response = await fetch('/api/posts', {
+          method: 'POST',
+          body: formData
+        })
+
+        const result = await response.json()
+        
+        if (result.success) {
+          const displayTime = new Date(`${scheduledDate}T${scheduledTime}`).toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+          alert(`✅ 게시물이 예약되었습니다!\n예약 시간: ${displayTime}`)
+          router.push('/dashboard/scheduled')
+        } else {
+          alert('❌ 예약 저장에 실패했습니다.')
+        }
+        return
+      }
+
+      // 즉시 업로드인 경우 기존 로직 실행
       const results = []
 
       // 선택된 각 계정에 업로드
@@ -233,9 +302,16 @@ function CreatePostContent() {
             </div>
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">Schedule post</span>
-              <div className="w-10 h-6 bg-gray-300 rounded-full relative cursor-pointer">
-                <div className="w-4 h-4 bg-white rounded-full absolute top-1 left-1 transition-transform"></div>
-              </div>
+              <button
+                onClick={() => setIsScheduled(!isScheduled)}
+                className={`w-10 h-6 rounded-full relative cursor-pointer transition-colors ${
+                  isScheduled ? 'bg-blue-500' : 'bg-gray-300'
+                }`}
+              >
+                <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${
+                  isScheduled ? 'translate-x-5' : 'translate-x-1'
+                }`}></div>
+              </button>
             </div>
           </div>
         </div>
@@ -439,6 +515,51 @@ function CreatePostContent() {
               </div>
             )}
 
+            {/* Schedule Settings */}
+            {isScheduled && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-medium text-blue-900 mb-3">⏰ Schedule Settings</h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-blue-800 mb-2">Date</label>
+                    <input
+                      type="date"
+                      value={scheduledDate}
+                      onChange={(e) => setScheduledDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]} // 오늘 이후만 선택 가능
+                      className="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-blue-800 mb-2">Time</label>
+                    <input
+                      type="time"
+                      value={scheduledTime}
+                      onChange={(e) => setScheduledTime(e.target.value)}
+                      className="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                {scheduledDate && scheduledTime && (
+                  <div className="mt-3 p-3 bg-blue-100 border border-blue-200 rounded-lg">
+                    <div className="flex items-center space-x-2 text-blue-800">
+                      <span>📅</span>
+                      <span className="text-sm font-medium">
+                        예약 시간: {new Date(`${scheduledDate}T${scheduledTime}`).toLocaleString('ko-KR', {
+                          year: 'numeric',
+                          month: 'long', 
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          weekday: 'long'
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Upload Progress */}
             {uploading && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -472,12 +593,12 @@ function CreatePostContent() {
                   {uploading ? (
                     <>
                       <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                      <span>업로드 중...</span>
+                      <span>{isScheduled ? '예약 중...' : '업로드 중...'}</span>
                     </>
                   ) : (
                     <>
-                      <span>✈️</span>
-                      <span>Post now</span>
+                      <span>{isScheduled ? '⏰' : '✈️'}</span>
+                      <span>{isScheduled ? 'Schedule post' : 'Post now'}</span>
                     </>
                   )}
                 </button>
