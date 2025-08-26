@@ -7,8 +7,7 @@ const redis = new Redis({
   password: process.env.REDIS_PASSWORD!,
   tls: {
     rejectUnauthorized: false,
-    requestCert: false,
-    agent: false
+    requestCert: false
   },
   family: 4,
   connectTimeout: 30000,
