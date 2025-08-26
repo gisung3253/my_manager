@@ -5,14 +5,10 @@ const redis = new Redis({
   host: process.env.REDIS_HOST!,
   port: parseInt(process.env.REDIS_PORT || '6379'),
   password: process.env.REDIS_PASSWORD!,
-  tls: {
-    rejectUnauthorized: false,
-    requestCert: false
-  },
+  tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
   family: 4,
   connectTimeout: 30000,
   lazyConnect: true,
-  retryDelayOnFailover: 1000,
   maxRetriesPerRequest: null,
 })
 
