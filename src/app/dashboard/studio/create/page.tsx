@@ -184,81 +184,46 @@ function CreatePostContent() {
         return
       }
 
-      // 즉시 업로드인 경우 기존 로직 실행
-      const results = []
+      // 즉시 업로드인 경우 - 새로운 멀티 업로드 API 사용
+      const formData = new FormData()
+      formData.append('video', videoFile)
+      formData.append('selectedAccounts', JSON.stringify(selectedAccounts))
+      formData.append('title', youtubeTitle || '제목 없음')
+      formData.append('description', youtubeDescription)
+      formData.append('privacy', youtubePrivacy)
+      formData.append('userId', user.id.toString())
+      formData.append('mainCaption', mainCaption)
 
-      // 선택된 각 계정에 업로드
-      for (const accountId of selectedAccounts) {
-        const account = connectedAccounts.find(acc => acc.id === accountId)
-        if (!account) continue
+      const response = await fetch('/api/upload/multi', {
+        method: 'POST',
+        body: formData
+      })
 
-        setUploadProgress(prev => prev + (100 / selectedAccounts.length) * 0.1)
-
-        if (account.platform.toLowerCase() === 'youtube') {
-          // YouTube 업로드
-          const formData = new FormData()
-          formData.append('video', videoFile)
-          formData.append('accountId', accountId.toString())
-          formData.append('title', youtubeTitle || '제목 없음')
-          formData.append('description', youtubeDescription || mainCaption)
-          formData.append('privacy', youtubePrivacy)
-          formData.append('userId', user.id.toString())
-
-          const response = await fetch('/api/upload/youtube', {
-            method: 'POST',
-            body: formData
-          })
-
-          const result = await response.json()
-          
-          if (result.success) {
-            results.push({
-              platform: 'YouTube',
-              account: account.account_name,
-              success: true,
-              url: result.videoUrl
-            })
-          } else {
-            results.push({
-              platform: 'YouTube',
-              account: account.account_name,
-              success: false,
-              error: result.error
-            })
-          }
-        } else {
-          // 다른 플랫폼은 아직 구현 안됨
-          results.push({
-            platform: account.platform,
-            account: account.account_name,
-            success: false,
-            error: '아직 지원되지 않는 플랫폼입니다.'
-          })
-        }
-
-        setUploadProgress(prev => prev + (100 / selectedAccounts.length) * 0.9)
-      }
-
+      const result = await response.json()
       setUploadProgress(100)
 
-      // 결과 표시
-      const successCount = results.filter(r => r.success).length
-      const failCount = results.filter(r => !r.success).length
+      if (result.success) {
+        const successCount = result.results.filter((r: any) => r.success).length
+        const failCount = result.results.filter((r: any) => !r.success).length
 
-      if (successCount > 0) {
-        const successResults = results.filter(r => r.success)
-        let message = `✅ ${successCount}개 계정에 성공적으로 업로드되었습니다!\n\n`
-        successResults.forEach(r => {
-          message += `• ${r.platform} (${r.account})\n${r.url || ''}\n\n`
-        })
-        
-        if (failCount > 0) {
-          message += `❌ ${failCount}개 계정 업로드 실패`
+        if (successCount > 0) {
+          const successResults = result.results.filter((r: any) => r.success)
+          let message = `✅ ${successCount}개 계정에 성공적으로 업로드되었습니다!\n\n`
+          successResults.forEach((r: any) => {
+            message += `• ${r.platform} (${r.accountName})\n${r.url || ''}\n\n`
+          })
+          
+          if (failCount > 0) {
+            message += `❌ ${failCount}개 계정 업로드 실패`
+          }
+          
+          alert(message)
+          router.push('/dashboard/posted')
+        } else {
+          alert('❌ 모든 업로드가 실패했습니다.')
         }
-        
-        alert(message)
       } else {
-        alert('❌ 모든 업로드가 실패했습니다.')
+        alert('❌ 업로드 중 오류가 발생했습니다.')
       }
 
     } catch (error) {
@@ -436,12 +401,12 @@ function CreatePostContent() {
 
             {/* Main Caption */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Main Caption</label>
+              <label className="block text-sm font-medium text-gray-900 mb-2">Main Caption</label>
               <textarea
                 value={mainCaption}
                 onChange={(e) => setMainCaption(e.target.value)}
                 placeholder="Start writing your post here..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-gray-900 placeholder-gray-500"
                 rows={4}
               />
             </div>
@@ -454,27 +419,27 @@ function CreatePostContent() {
                 <h4 className="font-medium text-red-900 mb-3">📺 YouTube Settings</h4>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-red-800 mb-1">Video Title *</label>
+                    <label className="block text-sm font-medium text-gray-900 mb-1">Video Title *</label>
                     <input
                       type="text"
                       value={youtubeTitle}
                       onChange={(e) => setYoutubeTitle(e.target.value)}
-                      className="w-full p-2 border border-red-300 rounded focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      className="w-full p-2 border border-red-300 rounded focus:ring-2 focus:ring-red-500 focus:border-red-500 text-gray-900 placeholder-gray-500"
                       placeholder="Enter video title..."
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-red-800 mb-1">Description</label>
+                    <label className="block text-sm font-medium text-gray-900 mb-1">Description</label>
                     <textarea
                       value={youtubeDescription}
                       onChange={(e) => setYoutubeDescription(e.target.value)}
-                      className="w-full p-2 border border-red-300 rounded focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      className="w-full p-2 border border-red-300 rounded focus:ring-2 focus:ring-red-500 focus:border-red-500 text-gray-900 placeholder-gray-500"
                       placeholder="Video description..."
                       rows={3}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-red-800 mb-2">Privacy Settings</label>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">Privacy Settings</label>
                     <div className="space-y-2">
                       <label className="flex items-center space-x-2">
                         <input
@@ -485,7 +450,7 @@ function CreatePostContent() {
                           onChange={(e) => setYoutubePrivacy(e.target.value as 'public' | 'unlisted' | 'private')}
                           className="w-4 h-4 text-red-600 border-red-300 focus:ring-red-500"
                         />
-                        <span className="text-sm text-red-800">🌍 Public (누구나 시청 가능)</span>
+                        <span className="text-sm text-gray-900">🌍 Public (누구나 시청 가능)</span>
                       </label>
                       <label className="flex items-center space-x-2">
                         <input
@@ -496,7 +461,7 @@ function CreatePostContent() {
                           onChange={(e) => setYoutubePrivacy(e.target.value as 'public' | 'unlisted' | 'private')}
                           className="w-4 h-4 text-red-600 border-red-300 focus:ring-red-500"
                         />
-                        <span className="text-sm text-red-800">🔗 Unlisted (링크 있으면 시청 가능)</span>
+                        <span className="text-sm text-gray-900">🔗 Unlisted (링크 있으면 시청 가능)</span>
                       </label>
                       <label className="flex items-center space-x-2">
                         <input
@@ -507,7 +472,7 @@ function CreatePostContent() {
                           onChange={(e) => setYoutubePrivacy(e.target.value as 'public' | 'unlisted' | 'private')}
                           className="w-4 h-4 text-red-600 border-red-300 focus:ring-red-500"
                         />
-                        <span className="text-sm text-red-800">🔒 Private (본인만 시청 가능)</span>
+                        <span className="text-sm text-gray-900">🔒 Private (본인만 시청 가능)</span>
                       </label>
                     </div>
                   </div>
@@ -521,22 +486,22 @@ function CreatePostContent() {
                 <h4 className="font-medium text-blue-900 mb-3">⏰ Schedule Settings</h4>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-blue-800 mb-2">Date</label>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">Date</label>
                     <input
                       type="date"
                       value={scheduledDate}
                       onChange={(e) => setScheduledDate(e.target.value)}
                       min={new Date().toISOString().split('T')[0]} // 오늘 이후만 선택 가능
-                      className="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-blue-800 mb-2">Time</label>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">Time</label>
                     <input
                       type="time"
                       value={scheduledTime}
                       onChange={(e) => setScheduledTime(e.target.value)}
-                      className="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                     />
                   </div>
                 </div>

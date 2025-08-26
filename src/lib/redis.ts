@@ -1,14 +1,13 @@
 import Redis from 'ioredis'
 
-// Upstash Redis 연결 설정
+// Upstash Redis 연결 설정 - 간소화 버전
 const redis = new Redis({
   host: process.env.REDIS_HOST!,
   port: parseInt(process.env.REDIS_PORT || '6379'),
   password: process.env.REDIS_PASSWORD!,
-  tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
-  family: 4,
-  connectTimeout: 30000,
-  lazyConnect: true,
+  tls: {},
+  family: 4,  // IPv4 강제 사용
+  connectTimeout: 60000,  // 1분
   maxRetriesPerRequest: null,
 })
 
