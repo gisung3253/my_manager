@@ -35,29 +35,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '계정을 찾을 수 없습니다' }, { status: 404 })
     }
 
-    // 계정 정보 디버깅
-    console.log('🔍 Twitter 계정 정보:', {
-      accountId: account.id,
-      platform: account.platform,
-      username: account.username,
-      hasAccessToken: !!account.access_token,
-      hasAccessTokenSecret: !!account.access_token_secret,
-      accessTokenLength: account.access_token?.length,
-      secretLength: account.access_token_secret?.length
-    })
-
-    // 4. OAuth 설정 및 환경변수 확인
-    console.log('🔍 환경변수 확인:', {
-      hasClientId: !!process.env.TWITTER_CLIENT_ID,
-      hasClientSecret: !!process.env.TWITTER_CLIENT_SECRET,
-      clientIdLength: process.env.TWITTER_CLIENT_ID?.length,
-      secretLength: process.env.TWITTER_CLIENT_SECRET?.length
-    })
 
     const oauth = new OAuth({
       consumer: {
-        key: process.env.TWITTER_CLIENT_ID!,
-        secret: process.env.TWITTER_CLIENT_SECRET!
+        key: process.env.TWITTER_API_KEY!,
+        secret: process.env.TWITTER_API_SECRET!
       },
       signature_method: 'HMAC-SHA1',
       hash_function(base_string, key) {
@@ -105,14 +87,8 @@ export async function POST(request: NextRequest) {
       method: 'POST'
     }
 
-    const authHeader = oauth.toHeader(oauth.authorize(requestData, token))
-
-    console.log('🔍 트윗 요청 데이터:', {
-      url: requestData.url,
-      method: requestData.method,
-      tweetData,
-      authHeaderKeys: Object.keys(authHeader)
-    })
+    const authData = oauth.authorize(requestData, token)
+    const authHeader = oauth.toHeader(authData)
 
     const response = await fetch('https://api.twitter.com/2/tweets', {
       method: 'POST',
@@ -124,12 +100,6 @@ export async function POST(request: NextRequest) {
     })
 
     const result = await response.json()
-    
-    console.log('🔍 Twitter API 응답:', {
-      status: response.status,
-      statusText: response.statusText,
-      result
-    })
 
     if (response.ok && result.data) {
       return NextResponse.json({
@@ -236,98 +206,151 @@ async function uploadVideoChunked(
   oauth: any,
   token: any
 ): Promise<string | null> {
-  // INIT
-  const initData = {
-    command: 'INIT',
-    total_bytes: buffer.length,
-    media_type: mediaType,
-    media_category: mediaCategory
-  }
+  try {
+    // INIT
+    const initData = {
+      command: 'INIT',
+      total_bytes: buffer.length,
+      media_type: mediaType,
+      media_category: mediaCategory
+    }
 
-  const initRequestData = {
-    url: 'https://upload.twitter.com/1.1/media/upload.json',
-    method: 'POST'
-  }
-
-  const initAuthHeader = oauth.toHeader(oauth.authorize(initRequestData, token))
-  const initFormData = new FormData()
-  Object.entries(initData).forEach(([key, value]) => {
-    initFormData.append(key, value.toString())
-  })
-
-  const initResponse = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
-    method: 'POST',
-    headers: {
-      ...initAuthHeader
-    },
-    body: initFormData
-  })
-
-  const initResult = await initResponse.json()
-  if (!initResponse.ok) {
-    throw new Error('동영상 업로드 초기화 실패')
-  }
-
-  const mediaId = initResult.media_id_string
-
-  // APPEND (chunks)
-  const chunkSize = 5 * 1024 * 1024 // 5MB chunks
-  let segmentIndex = 0
-
-  for (let i = 0; i < buffer.length; i += chunkSize) {
-    const chunk = buffer.slice(i, i + chunkSize)
-    
-    const appendRequestData = {
+    const initRequestData = {
       url: 'https://upload.twitter.com/1.1/media/upload.json',
       method: 'POST'
     }
 
-    const appendAuthHeader = oauth.toHeader(oauth.authorize(appendRequestData, token))
-    const appendFormData = new FormData()
-    appendFormData.append('command', 'APPEND')
-    appendFormData.append('media_id', mediaId)
-    appendFormData.append('segment_index', segmentIndex.toString())
-    appendFormData.append('media', new Blob([new Uint8Array(chunk)]))
-
-    const appendResponse = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
-      method: 'POST',
-      headers: {
-        ...appendAuthHeader
-      },
-      body: appendFormData
+    const initAuthHeader = oauth.toHeader(oauth.authorize(initRequestData, token))
+    const initFormData = new FormData()
+    Object.entries(initData).forEach(([key, value]) => {
+      initFormData.append(key, value.toString())
     })
 
-    if (!appendResponse.ok) {
-      throw new Error(`청크 업로드 실패: ${segmentIndex}`)
+    const initResponse = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
+      method: 'POST',
+      headers: {
+        ...initAuthHeader
+      },
+      body: initFormData
+    })
+
+    const initResult = await initResponse.json()
+
+    if (!initResponse.ok) {
+      throw new Error(`동영상 업로드 초기화 실패: ${JSON.stringify(initResult)}`)
     }
 
-    segmentIndex++
-  }
+    const mediaId = initResult.media_id_string
 
-  // FINALIZE
-  const finalizeRequestData = {
-    url: 'https://upload.twitter.com/1.1/media/upload.json',
-    method: 'POST'
-  }
+    // APPEND (chunks)
+    const chunkSize = 5 * 1024 * 1024 // 5MB chunks
+    let segmentIndex = 0
 
-  const finalizeAuthHeader = oauth.toHeader(oauth.authorize(finalizeRequestData, token))
-  const finalizeFormData = new FormData()
-  finalizeFormData.append('command', 'FINALIZE')
-  finalizeFormData.append('media_id', mediaId)
+    for (let i = 0; i < buffer.length; i += chunkSize) {
+      const chunk = buffer.slice(i, i + chunkSize)
+      
+      const appendRequestData = {
+        url: 'https://upload.twitter.com/1.1/media/upload.json',
+        method: 'POST'
+      }
 
-  const finalizeResponse = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
-    method: 'POST',
-    headers: {
-      ...finalizeAuthHeader
-    },
-    body: finalizeFormData
-  })
+      const appendAuthHeader = oauth.toHeader(oauth.authorize(appendRequestData, token))
+      const appendFormData = new FormData()
+      appendFormData.append('command', 'APPEND')
+      appendFormData.append('media_id', mediaId)
+      appendFormData.append('segment_index', segmentIndex.toString())
+      appendFormData.append('media', new Blob([new Uint8Array(chunk)]))
 
-  const finalizeResult = await finalizeResponse.json()
-  
-  if (finalizeResponse.ok) {
+      const appendResponse = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
+        method: 'POST',
+        headers: {
+          ...appendAuthHeader
+        },
+        body: appendFormData
+      })
+
+      if (!appendResponse.ok) {
+        const appendError = await appendResponse.text()
+        throw new Error(`청크 업로드 실패 (${segmentIndex}): ${appendError}`)
+      }
+
+      segmentIndex++
+    }
+
+    // FINALIZE
+    const finalizeRequestData = {
+      url: 'https://upload.twitter.com/1.1/media/upload.json',
+      method: 'POST'
+    }
+
+    const finalizeAuthHeader = oauth.toHeader(oauth.authorize(finalizeRequestData, token))
+    const finalizeFormData = new FormData()
+    finalizeFormData.append('command', 'FINALIZE')
+    finalizeFormData.append('media_id', mediaId)
+
+    const finalizeResponse = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
+      method: 'POST',
+      headers: {
+        ...finalizeAuthHeader
+      },
+      body: finalizeFormData
+    })
+
+    const finalizeResult = await finalizeResponse.json()
+    
+    if (!finalizeResponse.ok) {
+      throw new Error(`동영상 업로드 완료 처리 실패: ${JSON.stringify(finalizeResult)}`)
+    }
+
+    // STATUS 확인 단계 (동영상 처리 상태 체크)
+    if (finalizeResult.processing_info) {
+      let processingComplete = false
+      let attempts = 0
+      const maxAttempts = 30 // 최대 30번 시도 (약 5분)
+
+      while (!processingComplete && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, finalizeResult.processing_info.check_after_secs * 1000 || 10000))
+        
+        const statusRequestData = {
+          url: `https://upload.twitter.com/1.1/media/upload.json?command=STATUS&media_id=${mediaId}`,
+          method: 'GET'
+        }
+
+        const statusAuthHeader = oauth.toHeader(oauth.authorize(statusRequestData, token))
+        
+        const statusResponse = await fetch(statusRequestData.url, {
+          method: 'GET',
+          headers: {
+            ...statusAuthHeader
+          }
+        })
+
+        const statusResult = await statusResponse.json()
+
+        if (statusResult.processing_info) {
+          if (statusResult.processing_info.state === 'succeeded') {
+            processingComplete = true
+          } else if (statusResult.processing_info.state === 'failed') {
+            throw new Error(`동영상 처리 실패: ${statusResult.processing_info.error?.message || '알 수 없는 오류'}`)
+          }
+          // in_progress인 경우 계속 대기
+        } else {
+          // processing_info가 없으면 처리 완료로 간주
+          processingComplete = true
+        }
+
+        attempts++
+      }
+
+      if (!processingComplete) {
+        throw new Error('동영상 처리 시간 초과')
+      }
+    }
+    
     return mediaId
-  }
 
-  throw new Error('동영상 업로드 완료 처리 실패')
+  } catch (error) {
+    console.error('동영상 업로드 실패:', error)
+    return null
+  }
 }
