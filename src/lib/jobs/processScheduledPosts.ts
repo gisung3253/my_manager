@@ -1,5 +1,7 @@
 import { Job } from 'bull'
 import { supabase } from '../supabase'
+import crypto from 'crypto'
+import OAuth from 'oauth-1.0a'
 
 /**
  * 예약된 게시물 처리를 위한 작업 데이터 인터페이스
@@ -122,6 +124,67 @@ export async function processScheduledPost(job: Job<ScheduledPostJobData>) {
           }
         } else if (account.platform.toLowerCase() === 'youtube') {
           throw new Error('YouTube 업로드 실패 - 파일 데이터 또는 버퍼가 없음')
+        } else if (account.platform.toLowerCase() === 'twitter') {
+          console.log('🔍 Twitter 업로드 시작...')
+          
+          // 게시물 내용 가져오기
+          const { data: post } = await supabase
+            .from('posts')
+            .select('content')
+            .eq('id', postId)
+            .single()
+
+          // Twitter 업로드 실행
+          const result = await uploadToTwitter({
+            account,
+            fileData: fileData ? {
+              buffer: Buffer.from(fileData.buffer, 'base64'),
+              fileName: fileData.fileName,
+              fileSize: fileData.fileSize
+            } : null,
+            settings: {
+              content: post?.content || '',
+              ...platformSettings.twitter
+            },
+          })
+
+          // 업로드 결과 처리
+          if (result.success) {
+            const koreanUploadTime = new Date(new Date().getTime() + (9 * 60 * 60 * 1000)).toISOString()
+            
+            await supabase
+              .from('post_accounts')
+              .update({
+                upload_status: 'success',
+                platform_post_id: result.tweetId,
+                platform_url: result.tweetUrl,
+                uploaded_at: koreanUploadTime,
+              })
+              .eq('post_id', postId)
+              .eq('account_id', accountId)
+
+            results.push({ accountId, success: true, url: result.tweetUrl })
+          } else {
+            let errorMessage = 'Twitter 업로드 실패 - 알 수 없는 오류'
+            
+            try {
+              const errorObj = (result as any).error
+              if (errorObj) {
+                if (typeof errorObj === 'string') {
+                  errorMessage = errorObj
+                } else if (errorObj.message) {
+                  errorMessage = errorObj.message
+                } else {
+                  errorMessage = 'Twitter 업로드 실패 - ' + JSON.stringify(errorObj)
+                }
+              }
+            } catch (e) {
+              errorMessage = 'Twitter 업로드 실패 - 오류 파싱 실패'
+            }
+            
+            console.error(`계정 ${accountId}의 Twitter 업로드 실패:`, errorMessage)
+            throw new Error(errorMessage)
+          }
         } else {
           throw new Error(`플랫폼 ${account.platform}은 아직 지원되지 않습니다`)
         }
@@ -359,5 +422,282 @@ async function uploadToYouTube({
       success: false, 
       error: error instanceof Error ? error.message : '업로드 실패' 
     }
+  }
+}
+
+/**
+ * Twitter에 게시물 업로드하는 함수
+ */
+async function uploadToTwitter({
+  account,
+  fileData,
+  settings
+}: {
+  account: any
+  fileData: { buffer: Buffer; fileName: string; fileSize: number } | null
+  settings: { content?: string; hashtags?: string }
+}) {
+  try {
+    // OAuth 설정
+    const oauth = new OAuth({
+      consumer: {
+        key: process.env.TWITTER_API_KEY!,
+        secret: process.env.TWITTER_API_SECRET!
+      },
+      signature_method: 'HMAC-SHA1',
+      hash_function(base_string, key) {
+        return crypto
+          .createHmac('sha1', key)
+          .update(base_string)
+          .digest('base64')
+      }
+    })
+
+    const token = {
+      key: account.access_token,
+      secret: account.access_token_secret
+    }
+
+    // 미디어가 있는 경우 먼저 업로드
+    let mediaIds: string[] = []
+    if (fileData) {
+      const mediaId = await uploadMediaToTwitter(fileData, oauth, token)
+      if (mediaId) {
+        mediaIds.push(mediaId)
+      }
+    }
+
+    // 트윗 데이터 생성
+    const tweetData: any = {
+      text: settings.content || ''
+    }
+
+    if (mediaIds.length > 0) {
+      tweetData.media = {
+        media_ids: mediaIds
+      }
+    }
+
+    // 트윗 게시
+    const requestData = {
+      url: 'https://api.twitter.com/2/tweets',
+      method: 'POST'
+    }
+
+    const authData = oauth.authorize(requestData, token)
+    const authHeader = oauth.toHeader(authData)
+
+    const response = await fetch('https://api.twitter.com/2/tweets', {
+      method: 'POST',
+      headers: {
+        ...authHeader,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(tweetData)
+    })
+
+    const result = await response.json()
+
+    if (response.ok && result.data) {
+      return {
+        success: true,
+        tweetId: result.data.id,
+        tweetUrl: `https://twitter.com/${account.username}/status/${result.data.id}`
+      }
+    } else {
+      return {
+        success: false,
+        error: result.errors?.[0]?.message || 'Twitter 업로드에 실패했습니다'
+      }
+    }
+
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Twitter 업로드 실패'
+    }
+  }
+}
+
+/**
+ * Twitter에 미디어 파일 업로드
+ */
+async function uploadMediaToTwitter(
+  fileData: { buffer: Buffer; fileName: string; fileSize: number },
+  oauth: any,
+  token: any
+): Promise<string | null> {
+  try {
+    const { buffer, fileName } = fileData
+    
+    // 파일 타입 확인
+    const isVideo = fileName.toLowerCase().includes('.mp4') || fileName.toLowerCase().includes('.mov')
+    const mediaType = isVideo ? 'video/mp4' : 'image/jpeg'
+    const mediaCategory = isVideo ? 'tweet_video' : 'tweet_image'
+
+    if (isVideo) {
+      // 동영상은 chunked upload 사용
+      return await uploadVideoChunked(buffer, mediaType, mediaCategory, oauth, token)
+    } else {
+      // 이미지는 simple upload 사용
+      return await uploadImageSimple(buffer, mediaType, oauth, token)
+    }
+
+  } catch (error) {
+    console.error('미디어 업로드 오류:', error)
+    return null
+  }
+}
+
+/**
+ * 이미지 업로드 (Simple Upload)
+ */
+async function uploadImageSimple(
+  buffer: Buffer,
+  mediaType: string,
+  oauth: any,
+  token: any
+): Promise<string | null> {
+  try {
+    const requestData = {
+      url: 'https://upload.twitter.com/1.1/media/upload.json',
+      method: 'POST'
+    }
+
+    const authHeader = oauth.toHeader(oauth.authorize(requestData, token))
+
+    const formData = new FormData()
+    formData.append('media', new Blob([new Uint8Array(buffer)], { type: mediaType }))
+
+    const response = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
+      method: 'POST',
+      headers: {
+        ...authHeader
+      },
+      body: formData
+    })
+
+    const result = await response.json()
+
+    if (response.ok && result.media_id_string) {
+      return result.media_id_string
+    }
+
+    throw new Error(result.errors?.[0]?.message || '이미지 업로드 실패')
+  } catch (error) {
+    console.error('이미지 업로드 실패:', error)
+    return null
+  }
+}
+
+/**
+ * 동영상 업로드 (Chunked Upload) - 간소화 버전
+ */
+async function uploadVideoChunked(
+  buffer: Buffer,
+  mediaType: string,
+  mediaCategory: string,
+  oauth: any,
+  token: any
+): Promise<string | null> {
+  try {
+    // INIT
+    const initData = {
+      command: 'INIT',
+      total_bytes: buffer.length,
+      media_type: mediaType,
+      media_category: mediaCategory
+    }
+
+    const initRequestData = {
+      url: 'https://upload.twitter.com/1.1/media/upload.json',
+      method: 'POST'
+    }
+
+    const initAuthHeader = oauth.toHeader(oauth.authorize(initRequestData, token))
+    const initFormData = new FormData()
+    Object.entries(initData).forEach(([key, value]) => {
+      initFormData.append(key, value.toString())
+    })
+
+    const initResponse = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
+      method: 'POST',
+      headers: { ...initAuthHeader },
+      body: initFormData
+    })
+
+    const initResult = await initResponse.json()
+    if (!initResponse.ok) {
+      throw new Error(`동영상 업로드 초기화 실패: ${JSON.stringify(initResult)}`)
+    }
+
+    const mediaId = initResult.media_id_string
+
+    // APPEND (chunks)
+    const chunkSize = 5 * 1024 * 1024 // 5MB chunks
+    let segmentIndex = 0
+
+    for (let i = 0; i < buffer.length; i += chunkSize) {
+      const chunk = buffer.slice(i, i + chunkSize)
+      
+      const appendRequestData = {
+        url: 'https://upload.twitter.com/1.1/media/upload.json',
+        method: 'POST'
+      }
+
+      const appendAuthHeader = oauth.toHeader(oauth.authorize(appendRequestData, token))
+      const appendFormData = new FormData()
+      appendFormData.append('command', 'APPEND')
+      appendFormData.append('media_id', mediaId)
+      appendFormData.append('segment_index', segmentIndex.toString())
+      appendFormData.append('media', new Blob([new Uint8Array(chunk)]))
+
+      const appendResponse = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
+        method: 'POST',
+        headers: { ...appendAuthHeader },
+        body: appendFormData
+      })
+
+      if (!appendResponse.ok) {
+        throw new Error(`청크 업로드 실패 (${segmentIndex})`)
+      }
+
+      segmentIndex++
+    }
+
+    // FINALIZE
+    const finalizeRequestData = {
+      url: 'https://upload.twitter.com/1.1/media/upload.json',
+      method: 'POST'
+    }
+
+    const finalizeAuthHeader = oauth.toHeader(oauth.authorize(finalizeRequestData, token))
+    const finalizeFormData = new FormData()
+    finalizeFormData.append('command', 'FINALIZE')
+    finalizeFormData.append('media_id', mediaId)
+
+    const finalizeResponse = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
+      method: 'POST',
+      headers: { ...finalizeAuthHeader },
+      body: finalizeFormData
+    })
+
+    const finalizeResult = await finalizeResponse.json()
+    
+    if (!finalizeResponse.ok) {
+      throw new Error(`동영상 업로드 완료 처리 실패: ${JSON.stringify(finalizeResult)}`)
+    }
+
+    // 동영상 처리 대기 (간소화)
+    if (finalizeResult.processing_info && finalizeResult.processing_info.state === 'pending') {
+      // 간단한 대기 로직
+      await new Promise(resolve => setTimeout(resolve, 5000))
+    }
+    
+    return mediaId
+
+  } catch (error) {
+    console.error('동영상 업로드 실패:', error)
+    return null
   }
 }
