@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     )
 
     // Promise로 비동기 콜백 처리
-    return new Promise((resolve, reject) => {
+    return new Promise<NextResponse>((resolve, reject) => {
       // 4. 액세스 토큰으로 교환
       oauth.getOAuthAccessToken(
         oauth_token,
