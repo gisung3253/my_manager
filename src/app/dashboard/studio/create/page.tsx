@@ -21,6 +21,24 @@ function CreatePostContent() {
   const postType = searchParams.get('type') as 'text' | 'image' | 'video'
   const { isScheduled, setIsScheduled } = usePostCreation()
 
+  if (!postType || !['text', 'image', 'video'].includes(postType)) {
+    return (
+      <div className="h-full p-8 bg-gray-50">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">올바른 게시물 유형을 선택해주세요</h1>
+            <button 
+              onClick={() => router.push('/dashboard/studio')}
+              className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600"
+            >
+              돌아가기
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="h-full p-8 bg-gray-50">
       <div className="max-w-6xl mx-auto">
@@ -86,14 +104,6 @@ function CreatePostContent() {
  * 게시물 작성 페이지 (Suspense 래퍼)
  */
 export default function CreatePostPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const postType = searchParams.get('type') as 'text' | 'image' | 'video'
-  
-  if (!postType || !['text', 'image', 'video'].includes(postType)) {
-    return <div>올바른 게시물 유형을 선택해주세요.</div>
-  }
-  
   return (
     <Suspense fallback={
       <div className="h-full p-8">
