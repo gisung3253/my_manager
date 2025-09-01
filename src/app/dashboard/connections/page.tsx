@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react'
 
+/**
+ * 연결된 소셜 미디어 계정을 나타내는 인터페이스
+ */
 interface ConnectedAccount {
   id: number
   platform: string
@@ -9,6 +12,9 @@ interface ConnectedAccount {
   profile_image_url?: string
 }
 
+/**
+ * 지원하는 소셜 미디어 플랫폼 정보를 나타내는 인터페이스
+ */
 interface Platform {
   name: string
   icon: string
@@ -19,55 +25,63 @@ export default function ConnectionsPage() {
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([])
   const [loading, setLoading] = useState(true)
 
+  /**
+   * 지원하는 소셜 미디어 플랫폼 목록 정의
+   */
   const platforms: Platform[] = [
     { name: 'Instagram', icon: '📷', color: 'bg-gradient-to-r from-purple-500 to-pink-500' },
     { name: 'YouTube', icon: '📺', color: 'bg-red-500' },
     { name: 'Twitter', icon: '🐦', color: 'bg-blue-500' },
     { name: 'TikTok', icon: '🎵', color: 'bg-black' },
     { name: 'Facebook', icon: '👍', color: 'bg-blue-600' },
-    { name: 'LinkedIn', icon: '💼', color: 'bg-blue-700' },
-    { name: 'Bluesky', icon: '🦋', color: 'bg-sky-500' },
-    { name: 'Threads', icon: '🧵', color: 'bg-gray-800' },
-    { name: 'Pinterest', icon: '📌', color: 'bg-red-600' },
   ]
 
   useEffect(() => {
     fetchConnectedAccounts()
-    
-    // Check for connection success/error from URL params
+    handleConnectionCallback()
+  }, [])
+
+  /**
+   * URL 파라미터를 통해 소셜 미디어 계정 연결 결과 처리
+   */
+  const handleConnectionCallback = () => {
     const urlParams = new URLSearchParams(window.location.search)
     const success = urlParams.get('success')
     const error = urlParams.get('error')
 
+    // 성공 메시지 처리
     if (success === 'youtube_connected') {
       alert('YouTube 채널이 성공적으로 연결되었습니다!')
       setTimeout(() => fetchConnectedAccounts(), 1000)
-      // URL에서 파라미터 제거
-      window.history.replaceState({}, '', '/dashboard/connections')
+      clearUrlParams()
     } else if (success === 'twitter_connected') {
       alert('Twitter 계정이 성공적으로 연결되었습니다!')
       setTimeout(() => fetchConnectedAccounts(), 1000)
-      // URL에서 파라미터 제거
-      window.history.replaceState({}, '', '/dashboard/connections')
+      clearUrlParams()
     }
 
+    // 오류 메시지 처리
     if (error) {
       alert('연결 중 오류가 발생했습니다: ' + error)
-      // URL에서 파라미터 제거
-      window.history.replaceState({}, '', '/dashboard/connections')
+      clearUrlParams()
     }
-  }, [])
+  }
 
+  /**
+   * URL에서 파라미터 제거
+   */
+  const clearUrlParams = () => {
+    window.history.replaceState({}, '', '/dashboard/connections')
+  }
+
+  /**
+   * 연결된 소셜 미디어 계정 목록을 가져옴
+   */
   const fetchConnectedAccounts = async () => {
     try {
-      // localStorage에서 사용자 정보 가져오기
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
-        console.error('User not logged in')
-        return
-      }
-      
-      const user = JSON.parse(userStr)
+      const user = getUserFromLocalStorage()
+      if (!user) return
+
       const response = await fetch('/api/connections', {
         headers: {
           'x-user-id': user.id.toString()
@@ -83,42 +97,55 @@ export default function ConnectionsPage() {
     }
   }
 
+  /**
+   * 소셜 미디어 계정 연결 시작
+   * @param platformName 연결할 플랫폼 이름
+   */
   const handleConnect = async (platformName: string) => {
-    const userStr = localStorage.getItem('user')
-    if (!userStr) {
+    const user = getUserFromLocalStorage()
+    if (!user) {
       alert('로그인이 필요합니다.')
       return
     }
-    
-    const user = JSON.parse(userStr)
 
-    if (platformName === 'YouTube') {
-      window.location.href = `/api/connection/youtube?user_id=${user.id}`
-    } else if (platformName === 'Twitter') {
-      try {
-        const response = await fetch('/api/connection/twitter', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ userId: user.id }),
-        })
+    switch (platformName) {
+      case 'YouTube':
+        // YouTube 연결: API 엔드포인트로 리다이렉트
+        window.location.href = `/api/connection/youtube?user_id=${user.id}`
+        break;
+      
+      case 'Twitter':
+        // Twitter 연결: 인증 URL 요청 후 리다이렉트
+        try {
+          const response = await fetch('/api/connection/twitter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user.id }),
+          })
 
-        const data = await response.json()
-        if (data.authUrl) {
-          window.location.href = data.authUrl
-        } else {
+          const data = await response.json()
+          if (data.authUrl) {
+            window.location.href = data.authUrl
+          } else {
+            alert('Twitter 연결 중 오류가 발생했습니다.')
+          }
+        } catch (error) {
+          console.error('Twitter connection error:', error)
           alert('Twitter 연결 중 오류가 발생했습니다.')
         }
-      } catch (error) {
-        console.error('Twitter connection error:', error)
-        alert('Twitter 연결 중 오류가 발생했습니다.')
-      }
-    } else {
-      alert(`${platformName} 연결 기능은 준비 중입니다.`)
+        break;
+      
+      default:
+        // 기타 플랫폼: 준비 중 메시지 표시
+        alert(`${platformName} 연결 기능은 준비 중입니다.`)
+        break;
     }
   }
 
+  /**
+   * 연결된 소셜 미디어 계정 연결 해제
+   * @param accountId 연결 해제할 계정 ID
+   */
   const handleDisconnect = async (accountId: number) => {
     if (!confirm('정말로 이 계정을 연결 해제하시겠습니까?')) {
       return
@@ -127,14 +154,11 @@ export default function ConnectionsPage() {
     try {
       const response = await fetch('/api/connections/disconnect', {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId }),
       })
 
       if (response.ok) {
-        // 성공하면 목록 새로고침
         await fetchConnectedAccounts()
         alert('계정이 성공적으로 연결 해제되었습니다.')
       } else {
@@ -146,18 +170,33 @@ export default function ConnectionsPage() {
     }
   }
 
-  const isConnected = (platformName: string) => {
-    return connectedAccounts.some(account => 
-      account.platform.toLowerCase() === platformName.toLowerCase()
-    )
+  /**
+   * localStorage에서 사용자 정보를 가져옴
+   * @returns 사용자 객체 또는 null
+   */
+  const getUserFromLocalStorage = () => {
+    const userStr = localStorage.getItem('user')
+    if (!userStr) {
+      console.error('User not logged in')
+      return null
+    }
+    return JSON.parse(userStr)
   }
 
+  /**
+   * 특정 플랫폼에 대한 연결된 계정 목록 반환
+   * @param platformName 플랫폼 이름
+   * @returns 해당 플랫폼의 연결된 계정 목록
+   */
   const getConnectedAccounts = (platformName: string) => {
     return connectedAccounts.filter(account => 
       account.platform.toLowerCase() === platformName.toLowerCase()
     )
   }
 
+  /**
+   * 로딩 중 UI 렌더링
+   */
   if (loading) {
     return (
       <div className="h-full p-8">
@@ -175,9 +214,13 @@ export default function ConnectionsPage() {
     )
   }
 
+  /**
+   * 메인 UI 렌더링
+   */
   return (
     <div className="h-full p-8 bg-gray-50">
       <div className="max-w-4xl mx-auto">
+        {/* 헤더 */}
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Connected Accounts</h1>
           <div className="flex items-center space-x-2 text-sm text-gray-600">
@@ -188,9 +231,10 @@ export default function ConnectionsPage() {
           </div>
         </div>
         
+        {/* 플랫폼 목록 */}
         <div className="space-y-3">
           {platforms.map((platform) => {
-            const connectedAccounts = getConnectedAccounts(platform.name)
+            const platformAccounts = getConnectedAccounts(platform.name)
             
             return (
               <div key={platform.name} className="bg-white rounded-lg border border-gray-200 p-4">
@@ -200,7 +244,7 @@ export default function ConnectionsPage() {
                     {platform.icon}
                   </div>
 
-                  {/* Connect 버튼 - 항상 표시 */}
+                  {/* 연결 버튼 */}
                   <button 
                     onClick={() => handleConnect(platform.name)}
                     className="bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors w-[180px] text-center"
@@ -208,9 +252,9 @@ export default function ConnectionsPage() {
                     Connect {platform.name}
                   </button>
 
-                  {/* 연결된 계정들 표시 */}
+                  {/* 연결된 계정 목록 */}
                   <div className="flex items-center space-x-2 flex-wrap">
-                    {connectedAccounts.map((account) => (
+                    {platformAccounts.map((account) => (
                       <div key={account.id} className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 rounded-full px-3 py-2 transition-colors group">
                         {/* 프로필 이미지 또는 이니셜 */}
                         <div className="w-6 h-6 bg-gray-400 rounded-full flex items-center justify-center text-xs font-semibold text-white">
@@ -230,7 +274,7 @@ export default function ConnectionsPage() {
                           {account.account_name}
                         </span>
                         
-                        {/* 삭제 버튼 */}
+                        {/* 연결 해제 버튼 */}
                         <button 
                           onClick={() => handleDisconnect(account.id)}
                           className="w-5 h-5 rounded-full bg-gray-300 hover:bg-red-500 text-gray-600 hover:text-white transition-all duration-200 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100"
@@ -247,10 +291,13 @@ export default function ConnectionsPage() {
           })}
         </div>
 
-        {/* Refresh 버튼 (연결된 계정이 있을 때만) */}
+        {/* 계정 새로고침 버튼 */}
         {connectedAccounts.length > 0 && (
           <div className="mt-6">
-            <button className="border border-gray-300 hover:border-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <button 
+              onClick={fetchConnectedAccounts}
+              className="border border-gray-300 hover:border-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
               Refresh All Accounts
             </button>
           </div>
