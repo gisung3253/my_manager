@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     )
 
     // Promise로 비동기 콜백 처리
-    return new Promise((resolve, reject) => {
+    return new Promise<NextResponse>((resolve, reject) => {
       // 요청 토큰 발급 요청
       oauth.getOAuthRequestToken(async (error, oauthToken, oauthTokenSecret, results) => {
         // 요청 토큰 발급 실패 처리
