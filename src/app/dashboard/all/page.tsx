@@ -81,13 +81,12 @@ export default function AllPostsPage() {
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('ko-KR', {
+    return new Date(dateString).toLocaleString('ko-KR', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Seoul'
+      minute: '2-digit'
     })
   }
 

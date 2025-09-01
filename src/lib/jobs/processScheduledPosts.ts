@@ -84,13 +84,15 @@ export async function processScheduledPost(job: Job<ScheduledPostJobData>) {
           // 업로드 결과 처리
           if (result.success) {
             // 성공 시 결과 저장
+            const koreanUploadTime = new Date(new Date().getTime() + (9 * 60 * 60 * 1000)).toISOString()
+            
             await supabase
               .from('post_accounts')
               .update({
                 upload_status: 'success',
                 platform_post_id: result.videoId,
                 platform_url: result.videoUrl,
-                uploaded_at: new Date().toISOString(),
+                uploaded_at: koreanUploadTime,
               })
               .eq('post_id', postId)
               .eq('account_id', accountId)
@@ -146,11 +148,14 @@ export async function processScheduledPost(job: Job<ScheduledPostJobData>) {
     const successCount = results.filter(r => r.success).length
     const finalStatus = successCount > 0 ? 'posted' : 'failed'
 
+    const koreanTime = new Date(new Date().getTime() + (9 * 60 * 60 * 1000)).toISOString()
+    
     await supabase
       .from('posts')
       .update({
         status: finalStatus,
-        posted_at: successCount > 0 ? new Date().toISOString() : null,
+        posted_at: successCount > 0 ? koreanTime : null,
+        updated_at: koreanTime,
         platform_results: results,
       })
       .eq('id', postId)
