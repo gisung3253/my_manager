@@ -1,7 +1,7 @@
 'use client'
 
 import React, { createContext, useState, useContext, ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 // 연결된 계정 타입
 export interface ConnectedAccount {
@@ -88,11 +88,12 @@ export const PostCreationContext = createContext<PostCreationContextType | undef
 // Provider 컴포넌트
 interface PostCreationProviderProps {
   children: ReactNode
-  postType: 'text' | 'image' | 'video'
   router: ReturnType<typeof useRouter>
 }
 
-export function PostCreationProvider({ children, postType, router }: PostCreationProviderProps) {
+export function PostCreationProvider({ children, router }: PostCreationProviderProps) {
+  const searchParams = useSearchParams()
+  const postType = (searchParams.get('type') as 'text' | 'image' | 'video') || 'text'
   // 계정 관련 상태
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([])
   const [selectedAccounts, setSelectedAccounts] = useState<number[]>([])

@@ -104,6 +104,8 @@ function CreatePostContent() {
  * 게시물 작성 페이지 (Suspense 래퍼)
  */
 export default function CreatePostPage() {
+  const router = useRouter()
+  
   return (
     <Suspense fallback={
       <div className="h-full p-8">
@@ -126,7 +128,7 @@ export default function CreatePostPage() {
         </div>
       </div>
     }>
-      <PostCreationProvider postType={postType} router={router}>
+      <PostCreationProvider router={router}>
         <CreatePostContent />
       </PostCreationProvider>
     </Suspense>
