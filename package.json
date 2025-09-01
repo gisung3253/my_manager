@@ -10,10 +10,14 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.55.0",
+    "@types/oauth": "^0.9.6",
     "bull": "^4.16.5",
+    "crypto-js": "^4.2.0",
     "ioredis": "^5.7.0",
     "next": "15.4.7",
     "next-auth": "^4.24.11",
+    "oauth": "^0.10.2",
+    "oauth-1.0a": "^2.2.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "redis": "^5.8.2"

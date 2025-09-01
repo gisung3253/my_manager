@@ -44,6 +44,11 @@ export default function ConnectionsPage() {
       setTimeout(() => fetchConnectedAccounts(), 1000)
       // URL에서 파라미터 제거
       window.history.replaceState({}, '', '/dashboard/connections')
+    } else if (success === 'twitter_connected') {
+      alert('Twitter 계정이 성공적으로 연결되었습니다!')
+      setTimeout(() => fetchConnectedAccounts(), 1000)
+      // URL에서 파라미터 제거
+      window.history.replaceState({}, '', '/dashboard/connections')
     }
 
     if (error) {
@@ -78,17 +83,37 @@ export default function ConnectionsPage() {
     }
   }
 
-  const handleConnect = (platformName: string) => {
+  const handleConnect = async (platformName: string) => {
+    const userStr = localStorage.getItem('user')
+    if (!userStr) {
+      alert('로그인이 필요합니다.')
+      return
+    }
+    
+    const user = JSON.parse(userStr)
+
     if (platformName === 'YouTube') {
-      // localStorage에서 사용자 ID 가져와서 쿼리 파라미터로 전달
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
-        alert('로그인이 필요합니다.')
-        return
-      }
-      
-      const user = JSON.parse(userStr)
       window.location.href = `/api/connection/youtube?user_id=${user.id}`
+    } else if (platformName === 'Twitter') {
+      try {
+        const response = await fetch('/api/connection/twitter', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ userId: user.id }),
+        })
+
+        const data = await response.json()
+        if (data.authUrl) {
+          window.location.href = data.authUrl
+        } else {
+          alert('Twitter 연결 중 오류가 발생했습니다.')
+        }
+      } catch (error) {
+        console.error('Twitter connection error:', error)
+        alert('Twitter 연결 중 오류가 발생했습니다.')
+      }
     } else {
       alert(`${platformName} 연결 기능은 준비 중입니다.`)
     }
