@@ -192,87 +192,60 @@ export async function POST(request: NextRequest) {
  */
 async function uploadToCloudinary(file: File): Promise<string | null> {
   try {
-    // 환경변수 확인
     if (!process.env.CLOUDINARY_CLOUD_NAME || 
         !process.env.CLOUDINARY_API_KEY || 
         !process.env.CLOUDINARY_API_SECRET) {
-      console.log('⚠️ Cloudinary 환경변수가 설정되지 않음 - 데모 URL 사용')
-      
-      // 환경변수가 없으면 에러 반환 (데모 URL은 Instagram에서 차단됨)
       console.error('⚠️ Cloudinary 환경변수 누락 - Instagram 업로드 불가')
       return null
     }
 
-    // Cloudinary 설정
     const { v2: cloudinary } = await import('cloudinary')
-    
     cloudinary.config({
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
       api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+      secure: true
     })
 
-    // 파일을 base64로 변환
+    // 파일 base64 변환
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
     const base64Data = `data:${file.type};base64,${buffer.toString('base64')}`
 
-    // 파일 타입에 따른 업로드 옵션
-    const uploadOptions = {
-      folder: 'social_media_manager', // Cloudinary 폴더 구조
-      public_id: `instagram_${Date.now()}`, // 파일명
-      resource_type: file.type.startsWith('video/') ? 'video' : 'image' as 'video' | 'image',
-      transformation: file.type.startsWith('image/') ? [
-        { width: 1080, height: 1080, crop: 'limit' }, // Instagram 최적화
-        { quality: 'auto', fetch_format: 'auto' }
-      ] : [
-        // Instagram REELS 호환 변환 (단계별 분리)
-        {
-          format: 'mp4',
-          video_codec: 'h264',
-          audio_codec: 'aac',
-          width: 1080,
-          height: 1920,
-          crop: 'fill',
-          gravity: 'center',
-          fps: 30,
-          bit_rate: '5M',
-          audio_bit_rate: '128k',
-          flags: 'progressive',
-          profile: 'baseline',
-          duration: '90',        // 최대 90초
-          start_offset: '0',
-          min_duration: '3'      // 최소 3초 (Instagram REELS 요구사항)
-        },
-        // moov atom faststart (별도 변환)
-        {
-          flags: 'faststart'
-        }
-      ]
+    // 업로드 옵션
+    const isVideo = file.type.startsWith('video/')
+    const uploadOptions: Record<string, any> = {
+      folder: 'social_media_manager',
+      public_id: `instagram_${Date.now()}`,
+      resource_type: isVideo ? 'video' : 'image'
     }
 
-    console.log('📤 Cloudinary에 업로드 중:', {
-      fileType: file.type,
-      fileSize: buffer.length,
-      resourceType: uploadOptions.resource_type
+    if (!isVideo) {
+      // 이미지 최적화 옵션만 적용
+      uploadOptions.transformation = [
+        { width: 1080, height: 1080, crop: 'limit' },
+        { quality: 'auto', fetch_format: 'auto' }
+      ]
+    }
+    // 비디오는 transformation ❌ → Instagram에서 직접 검증
+
+    console.log('📤 Cloudinary 업로드 시작:', {
+      type: file.type,
+      size: buffer.length,
+      resource: uploadOptions.resource_type
     })
 
-    // Cloudinary에 업로드
     const result = await cloudinary.uploader.upload(base64Data, uploadOptions)
 
     console.log('✅ Cloudinary 업로드 완료:', {
       url: result.secure_url,
-      publicId: result.public_id,
       size: result.bytes
     })
 
     return result.secure_url
-
   } catch (error) {
     console.error('❌ Cloudinary 업로드 실패:', error)
-    
-    // 실패 시 null 반환 (Instagram에서 외부 URL 차단)
-    console.log('❌ Cloudinary 업로드 실패 - Instagram 업로드 불가')
     return null
   }
 }
+
