@@ -50,12 +50,14 @@ export async function POST(request: NextRequest) {
     // Instagram Business 계정 ID 사용
     const instagramAccountId = account.account_id
     
-    // Instagram Business API - 동영상은 VIDEO 타입이 다시 필요할 수 있음
+    // Instagram API - REELS 타입 사용 (VIDEO는 deprecated)
     const mediaParams = isVideo ? {
-      image_url: mediaUrl,  // Instagram Business API는 동영상도 image_url 필드 사용
-      media_type: 'VIDEO',  // VIDEO 타입 명시
+      image_url: mediaUrl,  // 동영상 URL을 image_url 필드에 넣음
+      media_type: 'REELS',  // REELS 타입 사용 (필수)
       caption: content || '',
-      access_token: account.access_token
+      access_token: account.access_token,
+      // REELS 추가 파라미터
+      audio_name: 'Original audio'  // 오디오 이름 (선택적)
     } : {
       image_url: mediaUrl,
       caption: content || '',
@@ -119,10 +121,9 @@ export async function POST(request: NextRequest) {
           break
         } else if (statusData.status_code === 'ERROR') {
           console.error('❌ Instagram 동영상 처리 오류:', statusData)
-          return NextResponse.json({
-            success: false,
-            error: `동영상 처리 실패. 동영상 형식을 확인해주세요. (권장: MP4, H.264, 최대 100MB, 최대 60초)`
-          }, { status: 400 })
+          console.log('⚠️ 동영상 처리 오류가 발생했지만 게시를 시도합니다...')
+          // 오류가 발생해도 게시 시도 (일부 경우 게시가 가능할 수 있음)
+          break
         }
         
         // 아직 처리 중이면 대기

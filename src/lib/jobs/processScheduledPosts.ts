@@ -805,12 +805,13 @@ async function uploadToInstagram({
                    fileData?.fileName?.toLowerCase().includes('.mov') || 
                    mediaUrl?.includes('video')
 
-    // Instagram API 컨테이너 생성 (동영상도 image_url 필드 사용)
+    // Instagram API 컨테이너 생성 (REELS 타입 사용)
     const mediaParams = isVideo ? {
-      image_url: mediaUrl,  // Instagram Business API는 동영상도 image_url 필드 사용
-      media_type: 'VIDEO',
+      image_url: mediaUrl,  // 동영상 URL을 image_url 필드에 넣음
+      media_type: 'REELS',
       caption: settings.content || '',
-      access_token: account.access_token
+      access_token: account.access_token,
+      audio_name: 'Original audio'
     } : {
       image_url: mediaUrl,
       caption: settings.content || '',
@@ -844,10 +845,9 @@ async function uploadToInstagram({
       console.log('📹 동영상 처리 상태:', statusData)
       
       if (statusData.status_code === 'ERROR') {
-        return {
-          success: false,
-          error: '동영상 처리 중 오류가 발생했습니다'
-        }
+        console.error('❌ Instagram 동영상 처리 오류:', statusData)
+        console.log('⚠️ 동영상 처리 오류가 발생했지만 게시를 시도합니다...')
+        // 오류가 발생해도 게시 시도
       }
     }
 
