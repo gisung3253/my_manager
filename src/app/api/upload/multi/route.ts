@@ -228,6 +228,97 @@ export async function POST(request: NextRequest) {
             error: uploadResult.error || '알 수 없는 오류'
           })
         }
+      } else if (account.platform.toLowerCase() === 'instagram') {
+        // Instagram 업로드 처리
+        console.log('📸 Instagram 업로드 시작:', { accountId, accountName: account.account_name })
+        
+        // Instagram 업로드에는 미디어 파일이 필수
+        if (!mediaFile) {
+          await supabase
+            .from('post_accounts')
+            .insert({
+              post_id: post.id,
+              account_id: accountId,
+              upload_status: 'failed',
+              error_message: 'Instagram 업로드에는 미디어 파일이 필요합니다'
+            })
+
+          uploadResults.push({
+            accountId,
+            accountName: account.account_name,
+            platform: 'Instagram',
+            success: false,
+            error: 'Instagram 업로드에는 미디어 파일이 필요합니다'
+          })
+          continue
+        }
+
+        // Instagram API 호출을 위한 FormData 준비
+        const instagramFormData = new FormData()
+        instagramFormData.append('content', mainCaption || description || title || '')
+        instagramFormData.append('accountId', accountId.toString())
+        instagramFormData.append('userId', userId)
+        instagramFormData.append('media', mediaFile)
+
+        console.log('📤 Instagram API 호출 중...')
+
+        // Instagram 업로드 API 호출
+        const uploadResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/upload/instagram`, {
+          method: 'POST',
+          body: instagramFormData
+        })
+
+        const uploadResult = await uploadResponse.json()
+
+        console.log('📸 Instagram 업로드 응답:', {
+          status: uploadResponse.status,
+          result: uploadResult
+        })
+
+        if (uploadResult.success && uploadResult.postId) {
+          // 성공 처리
+          const koreanUploadTime3 = new Date(new Date().getTime() + (9 * 60 * 60 * 1000)).toISOString()
+          
+          await supabase
+            .from('post_accounts')
+            .insert({
+              post_id: post.id,
+              account_id: accountId,
+              upload_status: 'success',
+              platform_post_id: uploadResult.postId,
+              platform_url: uploadResult.postUrl || `https://www.instagram.com/p/${uploadResult.postId}`,
+              uploaded_at: koreanUploadTime3
+            })
+
+          hasSuccess = true
+          uploadResults.push({
+            accountId,
+            accountName: account.account_name,
+            platform: 'Instagram',
+            success: true,
+            url: uploadResult.postUrl || `https://www.instagram.com/p/${uploadResult.postId}`
+          })
+        } else {
+          // 실패 처리
+          console.error('❌ Instagram 업로드 실패:', uploadResult)
+          
+          await supabase
+            .from('post_accounts')
+            .insert({
+              post_id: post.id,
+              account_id: accountId,
+              upload_status: 'failed',
+              error_message: uploadResult.error || '알 수 없는 Instagram 오류'
+            })
+
+          uploadResults.push({
+            accountId,
+            accountName: account.account_name,
+            platform: 'Instagram',
+            success: false,
+            error: uploadResult.error || '알 수 없는 Instagram 오류'
+          })
+        }
       } else {
         // 지원되지 않는 플랫폼
         await supabase
@@ -236,7 +327,7 @@ export async function POST(request: NextRequest) {
             post_id: post.id,
             account_id: accountId,
             upload_status: 'failed',
-            error_message: '지원되지 않는 플랫폼'
+            error_message: `지원되지 않는 플랫폼: ${account.platform}`
           })
 
         uploadResults.push({
@@ -244,7 +335,7 @@ export async function POST(request: NextRequest) {
           accountName: account.account_name,
           platform: account.platform,
           success: false,
-          error: '지원되지 않는 플랫폼'
+          error: `지원되지 않는 플랫폼: ${account.platform}`
         })
       }
     }
