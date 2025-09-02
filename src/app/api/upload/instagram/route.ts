@@ -50,14 +50,14 @@ export async function POST(request: NextRequest) {
     // Instagram Business 계정 ID 사용
     const instagramAccountId = account.account_id
     
-    // Instagram 동영상 업로드는 특별한 파라미터 구조가 필요
+    // Instagram 동영상 업로드는 REELS 타입 사용 (VIDEO는 deprecated)
     const mediaParams = isVideo ? {
-      media_type: 'VIDEO',
+      media_type: 'REELS',
       video_url: mediaUrl,
       caption: content || '',
       access_token: account.access_token,
-      // 동영상 업로드 시 추가 파라미터
-      thumb_offset: '0'  // 썸네일 시간(초)
+      // 릴스 업로드 시 추가 파라미터
+      cover_url: mediaUrl  // 커버 이미지 URL (동영상과 동일하게 설정)
     } : {
       image_url: mediaUrl,
       caption: content || '',

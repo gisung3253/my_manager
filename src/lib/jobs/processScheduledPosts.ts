@@ -805,13 +805,13 @@ async function uploadToInstagram({
                    fileData?.fileName?.toLowerCase().includes('.mov') || 
                    mediaUrl?.includes('video')
 
-    // Instagram API 컨테이너 생성
+    // Instagram API 컨테이너 생성 (REELS 타입 사용)
     const mediaParams = isVideo ? {
-      media_type: 'VIDEO',
+      media_type: 'REELS',
       video_url: mediaUrl,
       caption: settings.content || '',
       access_token: account.access_token,
-      thumb_offset: '0'  // 썸네일 시간(초)
+      cover_url: mediaUrl  // 커버 이미지 URL
     } : {
       image_url: mediaUrl,
       caption: settings.content || '',
