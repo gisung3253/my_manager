@@ -50,12 +50,12 @@ export async function POST(request: NextRequest) {
     // Instagram Business 계정 ID 사용
     const instagramAccountId = account.account_id
     
-    // Instagram 동영상 업로드 - 일반 비디오 포스트로 시도
+    // Instagram Business API - 동영상은 VIDEO 타입이 다시 필요할 수 있음
     const mediaParams = isVideo ? {
-      video_url: mediaUrl,
+      image_url: mediaUrl,  // Instagram Business API는 동영상도 image_url 필드 사용
+      media_type: 'VIDEO',  // VIDEO 타입 명시
       caption: content || '',
       access_token: account.access_token
-      // media_type 제거 - Instagram이 자동으로 판단하도록
     } : {
       image_url: mediaUrl,
       caption: content || '',

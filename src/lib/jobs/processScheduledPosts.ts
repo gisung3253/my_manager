@@ -805,9 +805,10 @@ async function uploadToInstagram({
                    fileData?.fileName?.toLowerCase().includes('.mov') || 
                    mediaUrl?.includes('video')
 
-    // Instagram API 컨테이너 생성 (기본 동영상 포스트)
+    // Instagram API 컨테이너 생성 (동영상도 image_url 필드 사용)
     const mediaParams = isVideo ? {
-      video_url: mediaUrl,
+      image_url: mediaUrl,  // Instagram Business API는 동영상도 image_url 필드 사용
+      media_type: 'VIDEO',
       caption: settings.content || '',
       access_token: account.access_token
     } : {
