@@ -198,12 +198,9 @@ async function uploadToCloudinary(file: File): Promise<string | null> {
         !process.env.CLOUDINARY_API_SECRET) {
       console.log('⚠️ Cloudinary 환경변수가 설정되지 않음 - 데모 URL 사용')
       
-      // 환경변수가 없으면 데모 URL 반환
-      if (file.type.startsWith('image/')) {
-        return 'https://via.placeholder.com/800x600/FF6B6B/FFFFFF?text=Demo+Image'
-      } else {
-        return 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4'
-      }
+      // 환경변수가 없으면 에러 반환 (데모 URL은 Instagram에서 차단됨)
+      console.error('⚠️ Cloudinary 환경변수 누락 - Instagram 업로드 불가')
+      return null
     }
 
     // Cloudinary 설정
@@ -229,34 +226,27 @@ async function uploadToCloudinary(file: File): Promise<string | null> {
         { width: 1080, height: 1080, crop: 'limit' }, // Instagram 최적화
         { quality: 'auto', fetch_format: 'auto' }
       ] : [
-        // Instagram REELS 엄격한 사양 준수 (API 2207026 오류 해결)
+        // Instagram REELS 호환 변환 (단계별 분리)
         {
-          format: 'mp4',           // MP4 컨테이너 (필수)
-          video_codec: 'h264',     // H.264 코덱 (필수)
-          audio_codec: 'aac',      // AAC 오디오 코덱 (필수)
-          
-          // 해상도 & 비율 (9:16 권장, 최대 1920px)
+          format: 'mp4',
+          video_codec: 'h264',
+          audio_codec: 'aac',
           width: 1080,
           height: 1920,
           crop: 'fill',
           gravity: 'center',
-          
-          // 프레임률 & 품질
-          fps: 30,                 // 23-60 fps 범위 내
-          bit_rate: '5M',          // 최대 25Mbps (5Mbps로 안전하게)
-          audio_bit_rate: '128k',  // 최대 128kbps
-          
-          // Instagram API 필수 옵션
-          flags: 'progressive',    // Progressive scan (필수)
-          profile: 'baseline',     // H.264 baseline profile
-          pixel_format: 'yuv420p', // 4:2:0 chroma subsampling
-          
-          // moov atom을 앞으로 (faststart)
-          streaming_profile: 'some', // moov atom을 파일 앞쪽으로
-          
-          // 길이 제한 (90초)
-          duration: '90',
-          start_offset: '0'
+          fps: 30,
+          bit_rate: '5M',
+          audio_bit_rate: '128k',
+          flags: 'progressive',
+          profile: 'baseline',
+          duration: '90',        // 최대 90초
+          start_offset: '0',
+          min_duration: '3'      // 최소 3초 (Instagram REELS 요구사항)
+        },
+        // moov atom faststart (별도 변환)
+        {
+          flags: 'faststart'
         }
       ]
     }
@@ -281,12 +271,8 @@ async function uploadToCloudinary(file: File): Promise<string | null> {
   } catch (error) {
     console.error('❌ Cloudinary 업로드 실패:', error)
     
-    // 실패 시 데모 URL로 폴백
-    console.log('🔄 데모 URL로 폴백')
-    if (file.type.startsWith('image/')) {
-      return 'https://via.placeholder.com/800x600/FF6B6B/FFFFFF?text=Fallback+Image'
-    } else {
-      return 'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4'
-    }
+    // 실패 시 null 반환 (Instagram에서 외부 URL 차단)
+    console.log('❌ Cloudinary 업로드 실패 - Instagram 업로드 불가')
+    return null
   }
 }

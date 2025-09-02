@@ -912,7 +912,7 @@ async function uploadToCloudinary(fileData: { buffer: Buffer; fileName: string; 
       public_id: `scheduled_${Date.now()}`,
       resource_type: isVideo ? 'video' : 'image' as 'video' | 'image',
       transformation: isVideo ? [
-        // Instagram REELS 엄격한 사양 준수
+        // Instagram REELS 호환 변환
         {
           format: 'mp4',
           video_codec: 'h264',
@@ -926,10 +926,12 @@ async function uploadToCloudinary(fileData: { buffer: Buffer; fileName: string; 
           audio_bit_rate: '128k',
           flags: 'progressive',
           profile: 'baseline',
-          pixel_format: 'yuv420p',
-          streaming_profile: 'some',
           duration: '90',
           start_offset: '0'
+        },
+        // moov atom faststart (별도 변환)
+        {
+          flags: 'faststart'
         }
       ] : [
         { width: 1080, height: 1080, crop: 'limit' }
