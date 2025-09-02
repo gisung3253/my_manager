@@ -105,18 +105,25 @@ export async function POST(request: NextRequest) {
       // 동영상은 처리 시간이 더 오래 걸림
       await new Promise(resolve => setTimeout(resolve, 10000)) // 10초 대기
       
-      // 선택적: 컨테이너 상태 확인
-      const statusResponse = await fetch(`https://graph.instagram.com/v21.0/${containerData.id}?fields=status_code&access_token=${account.access_token}`)
+      // 컨테이너 상태 확인 (더 자세한 정보 포함)
+      const statusResponse = await fetch(`https://graph.instagram.com/v21.0/${containerData.id}?fields=status_code,status&access_token=${account.access_token}`)
       const statusData = await statusResponse.json()
       
       console.log('📹 동영상 처리 상태:', statusData)
       
-      // ERROR가 아닌 경우에만 진행
+      // ERROR인 경우 더 자세한 정보와 함께 에러 처리
       if (statusData.status_code === 'ERROR') {
+        console.error('❌ Instagram 동영상 처리 오류:', statusData)
         return NextResponse.json({
           success: false,
-          error: '동영상 처리 중 오류가 발생했습니다'
+          error: `동영상 처리 실패: ${statusData.status || '알 수 없는 오류'}. Instagram REELS 요구사항을 확인하세요. (최대 60초, H.264 코덱, 세로형 권장)`
         }, { status: 400 })
+      }
+      
+      // FINISHED가 아닌 경우 추가 대기
+      if (statusData.status_code !== 'FINISHED') {
+        console.log('⏳ 동영상 처리가 아직 완료되지 않음, 추가 대기...')
+        await new Promise(resolve => setTimeout(resolve, 5000)) // 추가 5초 대기
       }
     }
 
@@ -210,7 +217,17 @@ async function uploadToCloudinary(file: File): Promise<string | null> {
         { width: 1080, height: 1080, crop: 'limit' }, // Instagram 최적화
         { quality: 'auto', fetch_format: 'auto' }
       ] : [
-        { width: 1080, height: 1350, crop: 'limit' }, // Instagram 동영상 최적화
+        // Instagram REELS 요구사항에 맞는 동영상 최적화
+        { 
+          width: 1080, 
+          height: 1350, 
+          crop: 'limit',
+          video_codec: 'h264',  // H.264 코덱 강제
+          audio_codec: 'aac',   // AAC 오디오 코덱
+          bit_rate: '1000k',    // 비트레이트 제한
+          fps: '30',            // 30fps로 제한
+          duration: '60'        // 최대 60초로 제한
+        },
         { quality: 'auto' }
       ]
     }
