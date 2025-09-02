@@ -50,8 +50,14 @@ export async function POST(request: NextRequest) {
     // Instagram Business 계정 ID 사용
     const instagramAccountId = account.account_id
     
-    const mediaParams = {
-      [isVideo ? 'video_url' : 'image_url']: mediaUrl,
+    // Instagram에서는 비디오도 media_type을 명시해야 함
+    const mediaParams = isVideo ? {
+      media_type: 'VIDEO',
+      video_url: mediaUrl,
+      caption: content || '',
+      access_token: account.access_token
+    } : {
+      image_url: mediaUrl,
       caption: content || '',
       access_token: account.access_token
     }

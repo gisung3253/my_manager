@@ -185,6 +185,68 @@ export async function processScheduledPost(job: Job<ScheduledPostJobData>) {
             console.error(`계정 ${accountId}의 Twitter 업로드 실패:`, errorMessage)
             throw new Error(errorMessage)
           }
+        } else if (account.platform.toLowerCase() === 'instagram') {
+          console.log('📸 Instagram 업로드 시작...')
+          
+          // 게시물 내용 가져오기
+          const { data: post } = await supabase
+            .from('posts')
+            .select('content, media_url')
+            .eq('id', postId)
+            .single()
+
+          // Instagram 업로드 실행
+          const result = await uploadToInstagram({
+            account,
+            fileData: fileData ? {
+              buffer: Buffer.from(fileData.buffer, 'base64'),
+              fileName: fileData.fileName,
+              fileSize: fileData.fileSize
+            } : null,
+            settings: {
+              content: post?.content || '',
+              mediaUrl: post?.media_url,
+              ...platformSettings.instagram
+            },
+          })
+
+          // 업로드 결과 처리
+          if (result.success) {
+            const koreanUploadTime = new Date(new Date().getTime() + (9 * 60 * 60 * 1000)).toISOString()
+            
+            await supabase
+              .from('post_accounts')
+              .update({
+                upload_status: 'success',
+                platform_post_id: result.postId,
+                platform_url: result.postUrl,
+                uploaded_at: koreanUploadTime,
+              })
+              .eq('post_id', postId)
+              .eq('account_id', accountId)
+
+            results.push({ accountId, success: true, url: result.postUrl })
+          } else {
+            let errorMessage = 'Instagram 업로드 실패 - 알 수 없는 오류'
+            
+            try {
+              const errorObj = (result as any).error
+              if (errorObj) {
+                if (typeof errorObj === 'string') {
+                  errorMessage = errorObj
+                } else if (errorObj.message) {
+                  errorMessage = errorObj.message
+                } else {
+                  errorMessage = 'Instagram 업로드 실패 - ' + JSON.stringify(errorObj)
+                }
+              }
+            } catch (e) {
+              errorMessage = 'Instagram 업로드 실패 - 오류 파싱 실패'
+            }
+            
+            console.error(`계정 ${accountId}의 Instagram 업로드 실패:`, errorMessage)
+            throw new Error(errorMessage)
+          }
         } else {
           throw new Error(`플랫폼 ${account.platform}은 아직 지원되지 않습니다`)
         }
@@ -698,6 +760,149 @@ async function uploadVideoChunked(
 
   } catch (error) {
     console.error('동영상 업로드 실패:', error)
+    return null
+  }
+}
+
+/**
+ * Instagram에 게시물 업로드하는 함수
+ */
+async function uploadToInstagram({
+  account,
+  fileData,
+  settings
+}: {
+  account: any
+  fileData: { buffer: Buffer; fileName: string; fileSize: number } | null
+  settings: { content?: string; mediaUrl?: string }
+}) {
+  try {
+    // Instagram은 미디어 파일이 필수
+    if (!fileData && !settings.mediaUrl) {
+      return {
+        success: false,
+        error: 'Instagram 업로드에는 미디어 파일이 필요합니다'
+      }
+    }
+
+    // 미디어 URL 결정 (예약 게시물의 경우 이미 Cloudinary에 업로드됨)
+    let mediaUrl = settings.mediaUrl
+    
+    // 파일 데이터가 있고 mediaUrl이 없다면 Cloudinary에 업로드
+    if (!mediaUrl && fileData) {
+      mediaUrl = await uploadToCloudinary(fileData)
+      if (!mediaUrl) {
+        return {
+          success: false,
+          error: '미디어 파일 업로드에 실패했습니다'
+        }
+      }
+    }
+
+    // 미디어 타입 확인
+    const isVideo = fileData?.fileName?.toLowerCase().includes('.mp4') || 
+                   fileData?.fileName?.toLowerCase().includes('.mov') || 
+                   mediaUrl?.includes('video')
+
+    // Instagram API 컨테이너 생성
+    const mediaParams = isVideo ? {
+      media_type: 'VIDEO',
+      video_url: mediaUrl,
+      caption: settings.content || '',
+      access_token: account.access_token
+    } : {
+      image_url: mediaUrl,
+      caption: settings.content || '',
+      access_token: account.access_token
+    }
+
+    const containerResponse = await fetch(`https://graph.instagram.com/v21.0/${account.account_id}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mediaParams)
+    })
+
+    const containerData = await containerResponse.json()
+
+    if (!containerResponse.ok) {
+      return {
+        success: false,
+        error: containerData.error?.message || 'Instagram 컨테이너 생성 실패'
+      }
+    }
+
+    // 동영상인 경우 처리 대기
+    if (isVideo) {
+      await new Promise(resolve => setTimeout(resolve, 3000))
+    }
+
+    // 게시 실행
+    const publishResponse = await fetch(`https://graph.instagram.com/v21.0/${account.account_id}/media_publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        creation_id: containerData.id,
+        access_token: account.access_token
+      })
+    })
+
+    const publishData = await publishResponse.json()
+
+    if (publishResponse.ok && publishData.id) {
+      return {
+        success: true,
+        postId: publishData.id,
+        postUrl: `https://www.instagram.com/p/${publishData.id}`
+      }
+    } else {
+      return {
+        success: false,
+        error: publishData.error?.message || 'Instagram 게시 실패'
+      }
+    }
+
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Instagram 업로드 실패'
+    }
+  }
+}
+
+/**
+ * Cloudinary에 미디어 파일 업로드
+ */
+async function uploadToCloudinary(fileData: { buffer: Buffer; fileName: string; fileSize: number }): Promise<string | null> {
+  try {
+    if (!process.env.CLOUDINARY_CLOUD_NAME || 
+        !process.env.CLOUDINARY_API_KEY || 
+        !process.env.CLOUDINARY_API_SECRET) {
+      console.log('⚠️ Cloudinary 환경변수가 설정되지 않음')
+      return null
+    }
+
+    const { v2: cloudinary } = await import('cloudinary')
+    
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET
+    })
+
+    const base64Data = `data:image/jpeg;base64,${fileData.buffer.toString('base64')}`
+    const isVideo = fileData.fileName.toLowerCase().includes('.mp4') || fileData.fileName.toLowerCase().includes('.mov')
+
+    const uploadOptions = {
+      folder: 'social_media_manager',
+      public_id: `scheduled_${Date.now()}`,
+      resource_type: isVideo ? 'video' : 'image' as 'video' | 'image'
+    }
+
+    const result = await cloudinary.uploader.upload(base64Data, uploadOptions)
+    return result.secure_url
+
+  } catch (error) {
+    console.error('❌ Cloudinary 업로드 실패:', error)
     return null
   }
 }
