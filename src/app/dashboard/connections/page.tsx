@@ -58,6 +58,10 @@ export default function ConnectionsPage() {
       alert('Twitter 계정이 성공적으로 연결되었습니다!')
       setTimeout(() => fetchConnectedAccounts(), 1000)
       clearUrlParams()
+    } else if (success === 'instagram_connected') {
+      alert('Instagram 계정이 성공적으로 연결되었습니다!')
+      setTimeout(() => fetchConnectedAccounts(), 1000)
+      clearUrlParams()
     }
 
     // 오류 메시지 처리
@@ -132,6 +136,27 @@ export default function ConnectionsPage() {
         } catch (error) {
           console.error('Twitter connection error:', error)
           alert('Twitter 연결 중 오류가 발생했습니다.')
+        }
+        break;
+      
+      case 'Instagram':
+        // Instagram 연결: 인증 URL 요청 후 리다이렉트
+        try {
+          const response = await fetch('/api/connection/instagram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user.id }),
+          })
+
+          const data = await response.json()
+          if (data.authUrl) {
+            window.location.href = data.authUrl
+          } else {
+            alert('Instagram 연결 중 오류가 발생했습니다.')
+          }
+        } catch (error) {
+          console.error('Instagram connection error:', error)
+          alert('Instagram 연결 중 오류가 발생했습니다.')
         }
         break;
       
