@@ -50,14 +50,12 @@ export async function POST(request: NextRequest) {
     // Instagram Business 계정 ID 사용
     const instagramAccountId = account.account_id
     
-    // Instagram 동영상 업로드는 REELS 타입 사용 (VIDEO는 deprecated)
+    // Instagram 동영상 업로드 - 일반 비디오 포스트로 시도
     const mediaParams = isVideo ? {
-      media_type: 'REELS',
       video_url: mediaUrl,
       caption: content || '',
-      access_token: account.access_token,
-      // 릴스 업로드 시 추가 파라미터
-      cover_url: mediaUrl  // 커버 이미지 URL (동영상과 동일하게 설정)
+      access_token: account.access_token
+      // media_type 제거 - Instagram이 자동으로 판단하도록
     } : {
       image_url: mediaUrl,
       caption: content || '',
@@ -105,25 +103,39 @@ export async function POST(request: NextRequest) {
       // 동영상은 처리 시간이 더 오래 걸림
       await new Promise(resolve => setTimeout(resolve, 10000)) // 10초 대기
       
-      // 컨테이너 상태 확인 (더 자세한 정보 포함)
-      const statusResponse = await fetch(`https://graph.instagram.com/v21.0/${containerData.id}?fields=status_code,status&access_token=${account.access_token}`)
-      const statusData = await statusResponse.json()
+      // 동영상 처리 상태를 여러 번 확인 (Instagram 서버 처리 시간 고려)
+      let attempts = 0
+      const maxAttempts = 6
+      let statusData
       
-      console.log('📹 동영상 처리 상태:', statusData)
-      
-      // ERROR인 경우 더 자세한 정보와 함께 에러 처리
-      if (statusData.status_code === 'ERROR') {
-        console.error('❌ Instagram 동영상 처리 오류:', statusData)
-        return NextResponse.json({
-          success: false,
-          error: `동영상 처리 실패: ${statusData.status || '알 수 없는 오류'}. Instagram REELS 요구사항을 확인하세요. (최대 60초, H.264 코덱, 세로형 권장)`
-        }, { status: 400 })
+      while (attempts < maxAttempts) {
+        const statusResponse = await fetch(`https://graph.instagram.com/v21.0/${containerData.id}?fields=status_code,status&access_token=${account.access_token}`)
+        statusData = await statusResponse.json()
+        
+        console.log(`📹 동영상 처리 상태 (${attempts + 1}/${maxAttempts}):`, statusData)
+        
+        if (statusData.status_code === 'FINISHED') {
+          console.log('✅ 동영상 처리 완료!')
+          break
+        } else if (statusData.status_code === 'ERROR') {
+          console.error('❌ Instagram 동영상 처리 오류:', statusData)
+          return NextResponse.json({
+            success: false,
+            error: `동영상 처리 실패. 동영상 형식을 확인해주세요. (권장: MP4, H.264, 최대 100MB, 최대 60초)`
+          }, { status: 400 })
+        }
+        
+        // 아직 처리 중이면 대기
+        attempts++
+        if (attempts < maxAttempts) {
+          console.log('⏳ 동영상 처리 중, 5초 후 재확인...')
+          await new Promise(resolve => setTimeout(resolve, 5000))
+        }
       }
       
-      // FINISHED가 아닌 경우 추가 대기
-      if (statusData.status_code !== 'FINISHED') {
-        console.log('⏳ 동영상 처리가 아직 완료되지 않음, 추가 대기...')
-        await new Promise(resolve => setTimeout(resolve, 5000)) // 추가 5초 대기
+      // 최대 시도 횟수 초과 시에도 게시 시도
+      if (statusData?.status_code !== 'FINISHED') {
+        console.log('⚠️ 동영상 처리 상태가 불명확하지만 게시를 시도합니다...')
       }
     }
 
@@ -217,18 +229,14 @@ async function uploadToCloudinary(file: File): Promise<string | null> {
         { width: 1080, height: 1080, crop: 'limit' }, // Instagram 최적화
         { quality: 'auto', fetch_format: 'auto' }
       ] : [
-        // Instagram REELS 요구사항에 맞는 동영상 최적화
+        // Instagram 동영상 기본 최적화 (간단한 변환)
         { 
           width: 1080, 
-          height: 1350, 
+          height: 1080, 
           crop: 'limit',
-          video_codec: 'h264',  // H.264 코덱 강제
-          audio_codec: 'aac',   // AAC 오디오 코덱
-          bit_rate: '1000k',    // 비트레이트 제한
-          fps: '30',            // 30fps로 제한
-          duration: '60'        // 최대 60초로 제한
-        },
-        { quality: 'auto' }
+          quality: 'auto',
+          video_codec: 'h264'  // H.264 코덱만 강제
+        }
       ]
     }
 
