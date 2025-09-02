@@ -107,27 +107,60 @@ export async function GET(request: NextRequest) {
     // 7. 데이터베이스에 연결 정보 저장
     const expiresAt = new Date(Date.now() + (expiresIn * 1000)).toISOString()
 
+    console.log('💾 데이터베이스 저장 시도:', {
+      userId: userId,
+      platform: 'instagram',
+      accountId: profileData.id,
+      username: profileData.username,
+      accessToken: finalAccessToken ? 'Present' : 'Missing',
+      expiresAt: expiresAt
+    })
+
+    // 기존 Instagram 계정 연결이 있는지 확인하고 삭제
+    const { error: deleteError } = await supabase
+      .from('connected_accounts')
+      .delete()
+      .eq('user_id', userId)
+      .eq('platform', 'instagram')
+
+    if (deleteError) {
+      console.log('기존 Instagram 연결 삭제 중 오류 (무시 가능):', deleteError)
+    }
+
+    const insertData = {
+      user_id: parseInt(userId),
+      platform: 'instagram',
+      account_id: profileData.id?.toString() || instagramUserId?.toString(),
+      account_name: profileData.username || 'Unknown',
+      username: profileData.username || 'Unknown',
+      profile_image_url: null,
+      access_token: finalAccessToken,
+      access_token_secret: null,
+      refresh_token: null,
+      expires_at: expiresAt,
+      account_type: profileData.account_type || 'BUSINESS',
+      media_count: profileData.media_count || 0,
+      followers_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+
+    console.log('📝 삽입할 데이터:', insertData)
+
     const { error: dbError } = await supabase
       .from('connected_accounts')
-      .insert({
-        user_id: userId,
-        platform: 'instagram',
-        account_id: profileData.id,
-        account_name: profileData.username,
-        username: profileData.username,
-        profile_image_url: null, // Instagram Business API는 프로필 이미지 제공 안함 (별도 요청 필요)
-        access_token: finalAccessToken,
-        access_token_secret: null, // OAuth 2.0에서는 사용 안함
-        refresh_token: null, // Instagram Business 토큰
-        expires_at: expiresAt,
-        account_type: profileData.account_type || 'BUSINESS',
-        media_count: profileData.media_count || 0,
-        followers_count: 0 // 별도 API 호출 필요
-      })
+      .insert(insertData)
 
     if (dbError) {
-      console.error('데이터베이스 저장 실패:', dbError)
-      return NextResponse.redirect(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/dashboard/connections?error=database_save_failed`)
+      console.error('❌ 데이터베이스 저장 실패:', {
+        error: dbError,
+        code: dbError.code,
+        message: dbError.message,
+        details: dbError.details,
+        hint: dbError.hint,
+        insertData: insertData
+      })
+      return NextResponse.redirect(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/dashboard/connections?error=database_save_failed&details=${encodeURIComponent(dbError.message)}`)
     }
 
     // 7. 임시 state 삭제
