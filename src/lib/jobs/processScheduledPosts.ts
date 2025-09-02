@@ -904,13 +904,33 @@ async function uploadToCloudinary(fileData: { buffer: Buffer; fileName: string; 
       api_secret: process.env.CLOUDINARY_API_SECRET
     })
 
-    const base64Data = `data:image/jpeg;base64,${fileData.buffer.toString('base64')}`
     const isVideo = fileData.fileName.toLowerCase().includes('.mp4') || fileData.fileName.toLowerCase().includes('.mov')
+    const base64Data = `data:${isVideo ? 'video/mp4' : 'image/jpeg'};base64,${fileData.buffer.toString('base64')}`
 
     const uploadOptions = {
       folder: 'social_media_manager',
       public_id: `scheduled_${Date.now()}`,
-      resource_type: isVideo ? 'video' : 'image' as 'video' | 'image'
+      resource_type: isVideo ? 'video' : 'image' as 'video' | 'image',
+      transformation: isVideo ? [
+        // Instagram REELS 호환 동영상 변환
+        { 
+          width: 1080,
+          height: 1920,  // 9:16 세로 비율
+          crop: 'fill',
+          gravity: 'center',
+          video_codec: 'h264',
+          audio_codec: 'aac',
+          bit_rate: '2M',
+          fps: 30,
+          format: 'mp4',
+          flags: 'progressive',
+          profile: 'baseline',
+          duration: '60',
+          start_offset: '0'
+        }
+      ] : [
+        { width: 1080, height: 1080, crop: 'limit' }
+      ]
     }
 
     const result = await cloudinary.uploader.upload(base64Data, uploadOptions)

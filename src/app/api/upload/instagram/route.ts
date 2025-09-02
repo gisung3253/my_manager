@@ -229,13 +229,21 @@ async function uploadToCloudinary(file: File): Promise<string | null> {
         { width: 1080, height: 1080, crop: 'limit' }, // Instagram 최적화
         { quality: 'auto', fetch_format: 'auto' }
       ] : [
-        // Instagram 동영상 기본 최적화 (간단한 변환)
+        // Instagram REELS 호환 동영상 변환 (엄격한 규격)
         { 
-          width: 1080, 
-          height: 1080, 
-          crop: 'limit',
-          quality: 'auto',
-          video_codec: 'h264'  // H.264 코덱만 강제
+          width: 1080,
+          height: 1920,  // 9:16 세로 비율 (REELS 표준)
+          crop: 'fill',   // 비율에 맞게 크롭
+          gravity: 'center',
+          video_codec: 'h264',
+          audio_codec: 'aac',
+          bit_rate: '2M',     // 2Mbps
+          fps: 30,            // 30fps 고정
+          format: 'mp4',      // MP4 포맷 강제
+          flags: 'progressive', // 프로그레시브 인코딩
+          profile: 'baseline',  // H.264 베이스라인 프로필
+          duration: '60',     // 최대 60초로 제한
+          start_offset: '0'   // 처음부터 시작
         }
       ]
     }
