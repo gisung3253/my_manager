@@ -46,6 +46,10 @@ export async function POST(request: NextRequest) {
 
     // 6. Instagram Graph API로 컨테이너 생성
     const isVideo = mediaFile.type.startsWith('video/')
+    
+    // Instagram Business 계정 ID 사용
+    const instagramAccountId = account.account_id
+    
     const mediaParams = {
       [isVideo ? 'video_url' : 'image_url']: mediaUrl,
       caption: content || '',
@@ -53,13 +57,16 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🔍 Instagram 컨테이너 생성 중:', {
-      accountId: account.account_id,
+      instagramAccountId: instagramAccountId,
       isVideo,
       mediaUrl,
-      caption: content?.substring(0, 50) + '...'
+      caption: content?.substring(0, 50) + '...',
+      accessToken: account.access_token ? 'Present' : 'Missing',
+      mediaParams: mediaParams
     })
 
-    const containerResponse = await fetch(`https://graph.instagram.com/me/media`, {
+    // Instagram Business 계정 ID를 사용하여 컨테이너 생성
+    const containerResponse = await fetch(`https://graph.instagram.com/v21.0/${instagramAccountId}/media`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(mediaParams)
@@ -67,11 +74,18 @@ export async function POST(request: NextRequest) {
 
     const containerData = await containerResponse.json()
 
+    console.log('📦 Instagram 컨테이너 응답:', containerData)
+
     if (!containerResponse.ok) {
-      console.error('Instagram 컨테이너 생성 실패:', containerData)
+      console.error('❌ Instagram 컨테이너 생성 실패:', {
+        status: containerResponse.status,
+        statusText: containerResponse.statusText,
+        error: containerData,
+        mediaParams: mediaParams
+      })
       return NextResponse.json({
         success: false,
-        error: containerData.error?.message || 'Instagram 컨테이너 생성 실패'
+        error: containerData.error?.message || `Instagram 컨테이너 생성 실패: ${containerResponse.status}`
       }, { status: 400 })
     }
 
@@ -89,15 +103,17 @@ export async function POST(request: NextRequest) {
       access_token: account.access_token
     }
 
-    console.log('📤 Instagram 게시 중...')
+    console.log('📤 Instagram 게시 중:', publishParams)
 
-    const publishResponse = await fetch(`https://graph.instagram.com/me/media_publish`, {
+    const publishResponse = await fetch(`https://graph.instagram.com/v21.0/${instagramAccountId}/media_publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(publishParams)
     })
 
     const publishData = await publishResponse.json()
+
+    console.log('📤 Instagram 게시 응답:', publishData)
 
     if (publishResponse.ok && publishData.id) {
       console.log('✅ Instagram 게시 완료:', publishData.id)
@@ -108,10 +124,15 @@ export async function POST(request: NextRequest) {
         postUrl: `https://www.instagram.com/p/${publishData.id}`
       })
     } else {
-      console.error('Instagram 게시 실패:', publishData)
+      console.error('❌ Instagram 게시 실패:', {
+        status: publishResponse.status,
+        statusText: publishResponse.statusText,
+        error: publishData,
+        publishParams: publishParams
+      })
       return NextResponse.json({
         success: false,
-        error: publishData.error?.message || 'Instagram 게시 실패'
+        error: publishData.error?.message || `Instagram 게시 실패: ${publishResponse.status}`
       }, { status: 400 })
     }
 
