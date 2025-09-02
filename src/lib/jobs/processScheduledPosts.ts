@@ -786,17 +786,18 @@ async function uploadToInstagram({
     }
 
     // 미디어 URL 결정 (예약 게시물의 경우 이미 Cloudinary에 업로드됨)
-    let mediaUrl = settings.mediaUrl
+    let mediaUrl: string | undefined = settings.mediaUrl
     
     // 파일 데이터가 있고 mediaUrl이 없다면 Cloudinary에 업로드
     if (!mediaUrl && fileData) {
-      mediaUrl = await uploadToCloudinary(fileData)
-      if (!mediaUrl) {
+      const uploadedUrl = await uploadToCloudinary(fileData)
+      if (!uploadedUrl) {
         return {
           success: false,
           error: '미디어 파일 업로드에 실패했습니다'
         }
       }
+      mediaUrl = uploadedUrl
     }
 
     // 미디어 타입 확인
