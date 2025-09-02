@@ -50,12 +50,14 @@ export async function POST(request: NextRequest) {
     // Instagram Business 계정 ID 사용
     const instagramAccountId = account.account_id
     
-    // Instagram에서는 비디오도 media_type을 명시해야 함
+    // Instagram 동영상 업로드는 특별한 파라미터 구조가 필요
     const mediaParams = isVideo ? {
       media_type: 'VIDEO',
       video_url: mediaUrl,
       caption: content || '',
-      access_token: account.access_token
+      access_token: account.access_token,
+      // 동영상 업로드 시 추가 파라미터
+      thumb_offset: '0'  // 썸네일 시간(초)
     } : {
       image_url: mediaUrl,
       caption: content || '',
@@ -99,8 +101,23 @@ export async function POST(request: NextRequest) {
 
     // 7. 동영상인 경우 처리 상태 확인 (필요시)
     if (isVideo) {
-      // 동영상은 처리 시간이 필요할 수 있음
-      await new Promise(resolve => setTimeout(resolve, 3000)) // 3초 대기
+      console.log('⏳ 동영상 처리 대기 중...')
+      // 동영상은 처리 시간이 더 오래 걸림
+      await new Promise(resolve => setTimeout(resolve, 10000)) // 10초 대기
+      
+      // 선택적: 컨테이너 상태 확인
+      const statusResponse = await fetch(`https://graph.instagram.com/v21.0/${containerData.id}?fields=status_code&access_token=${account.access_token}`)
+      const statusData = await statusResponse.json()
+      
+      console.log('📹 동영상 처리 상태:', statusData)
+      
+      // ERROR가 아닌 경우에만 진행
+      if (statusData.status_code === 'ERROR') {
+        return NextResponse.json({
+          success: false,
+          error: '동영상 처리 중 오류가 발생했습니다'
+        }, { status: 400 })
+      }
     }
 
     // 8. 컨테이너를 실제로 게시

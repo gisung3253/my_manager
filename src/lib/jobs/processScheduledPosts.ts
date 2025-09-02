@@ -810,7 +810,8 @@ async function uploadToInstagram({
       media_type: 'VIDEO',
       video_url: mediaUrl,
       caption: settings.content || '',
-      access_token: account.access_token
+      access_token: account.access_token,
+      thumb_offset: '0'  // 썸네일 시간(초)
     } : {
       image_url: mediaUrl,
       caption: settings.content || '',
@@ -834,7 +835,21 @@ async function uploadToInstagram({
 
     // 동영상인 경우 처리 대기
     if (isVideo) {
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      console.log('⏳ 동영상 처리 대기 중...')
+      await new Promise(resolve => setTimeout(resolve, 10000)) // 10초 대기
+      
+      // 컨테이너 상태 확인
+      const statusResponse = await fetch(`https://graph.instagram.com/v21.0/${containerData.id}?fields=status_code&access_token=${account.access_token}`)
+      const statusData = await statusResponse.json()
+      
+      console.log('📹 동영상 처리 상태:', statusData)
+      
+      if (statusData.status_code === 'ERROR') {
+        return {
+          success: false,
+          error: '동영상 처리 중 오류가 발생했습니다'
+        }
+      }
     }
 
     // 게시 실행
