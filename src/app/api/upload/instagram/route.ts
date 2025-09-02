@@ -50,14 +50,13 @@ export async function POST(request: NextRequest) {
     // Instagram Business 계정 ID 사용
     const instagramAccountId = account.account_id
     
-    // Instagram API - REELS 타입 사용 (VIDEO는 deprecated)
+    // Instagram API - REELS 타입은 video_url 필드 사용
     const mediaParams = isVideo ? {
-      image_url: mediaUrl,  // 동영상 URL을 image_url 필드에 넣음
-      media_type: 'REELS',  // REELS 타입 사용 (필수)
+      video_url: mediaUrl,  // REELS는 video_url 필드 사용
+      media_type: 'REELS',
       caption: content || '',
       access_token: account.access_token,
-      // REELS 추가 파라미터
-      audio_name: 'Original audio'  // 오디오 이름 (선택적)
+      audio_name: 'Original audio'
     } : {
       image_url: mediaUrl,
       caption: content || '',
