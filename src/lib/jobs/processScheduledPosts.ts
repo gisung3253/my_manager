@@ -912,20 +912,23 @@ async function uploadToCloudinary(fileData: { buffer: Buffer; fileName: string; 
       public_id: `scheduled_${Date.now()}`,
       resource_type: isVideo ? 'video' : 'image' as 'video' | 'image',
       transformation: isVideo ? [
-        // Instagram REELS 호환 동영상 변환
-        { 
-          width: 1080,
-          height: 1920,  // 9:16 세로 비율
-          crop: 'fill',
-          gravity: 'center',
+        // Instagram REELS 엄격한 사양 준수
+        {
+          format: 'mp4',
           video_codec: 'h264',
           audio_codec: 'aac',
-          bit_rate: '2M',
+          width: 1080,
+          height: 1920,
+          crop: 'fill',
+          gravity: 'center',
           fps: 30,
-          format: 'mp4',
+          bit_rate: '5M',
+          audio_bit_rate: '128k',
           flags: 'progressive',
           profile: 'baseline',
-          duration: '60',
+          pixel_format: 'yuv420p',
+          streaming_profile: 'some',
+          duration: '90',
           start_offset: '0'
         }
       ] : [

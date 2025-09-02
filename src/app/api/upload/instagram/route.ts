@@ -50,10 +50,10 @@ export async function POST(request: NextRequest) {
     // Instagram Business 계정 ID 사용
     const instagramAccountId = account.account_id
     
-    // Instagram API - REELS 타입은 video_url 필드 사용
+    // Instagram API - REELS 타입 (엄격한 사양 적용 후)
     const mediaParams = isVideo ? {
-      video_url: mediaUrl,  // REELS는 video_url 필드 사용
-      media_type: 'REELS',
+      video_url: mediaUrl,         // REELS는 video_url 필드 사용
+      media_type: 'REELS',         // REELS 타입 (필수)
       caption: content || '',
       access_token: account.access_token,
       audio_name: 'Original audio'
@@ -229,21 +229,34 @@ async function uploadToCloudinary(file: File): Promise<string | null> {
         { width: 1080, height: 1080, crop: 'limit' }, // Instagram 최적화
         { quality: 'auto', fetch_format: 'auto' }
       ] : [
-        // Instagram REELS 호환 동영상 변환 (엄격한 규격)
-        { 
+        // Instagram REELS 엄격한 사양 준수 (API 2207026 오류 해결)
+        {
+          format: 'mp4',           // MP4 컨테이너 (필수)
+          video_codec: 'h264',     // H.264 코덱 (필수)
+          audio_codec: 'aac',      // AAC 오디오 코덱 (필수)
+          
+          // 해상도 & 비율 (9:16 권장, 최대 1920px)
           width: 1080,
-          height: 1920,  // 9:16 세로 비율 (REELS 표준)
-          crop: 'fill',   // 비율에 맞게 크롭
+          height: 1920,
+          crop: 'fill',
           gravity: 'center',
-          video_codec: 'h264',
-          audio_codec: 'aac',
-          bit_rate: '2M',     // 2Mbps
-          fps: 30,            // 30fps 고정
-          format: 'mp4',      // MP4 포맷 강제
-          flags: 'progressive', // 프로그레시브 인코딩
-          profile: 'baseline',  // H.264 베이스라인 프로필
-          duration: '60',     // 최대 60초로 제한
-          start_offset: '0'   // 처음부터 시작
+          
+          // 프레임률 & 품질
+          fps: 30,                 // 23-60 fps 범위 내
+          bit_rate: '5M',          // 최대 25Mbps (5Mbps로 안전하게)
+          audio_bit_rate: '128k',  // 최대 128kbps
+          
+          // Instagram API 필수 옵션
+          flags: 'progressive',    // Progressive scan (필수)
+          profile: 'baseline',     // H.264 baseline profile
+          pixel_format: 'yuv420p', // 4:2:0 chroma subsampling
+          
+          // moov atom을 앞으로 (faststart)
+          streaming_profile: 'some', // moov atom을 파일 앞쪽으로
+          
+          // 길이 제한 (90초)
+          duration: '90',
+          start_offset: '0'
         }
       ]
     }
